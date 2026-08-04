@@ -1,120 +1,113 @@
-import { useState, useRef } from 'react'
-import { useSpring, animated, type AnimatedProps } from '@react-spring/web'
-import { useDrag } from '@use-gesture/react'
-import { getCategoryByKey } from '../../constants/categories'
+import { useRef, useState, useCallback } from 'react'
 import type { Expense } from '../../types/expense'
-import type { HTMLAttributes } from 'react'
 
-const AnimatedDiv = animated.div as React.ComponentType<AnimatedProps<HTMLAttributes<HTMLDivElement>>>
+const CATEGORY_ICONS: Record<string, string> = {
+  food: '🍔',
+  transport: '🚌',
+  shopping: '🛍️',
+  entertainment: '🎬',
+  bills: '📄',
+  health: '💊',
+  other: '📦',
+}
 
 interface ExpenseItemProps {
   expense: Expense
-  onDelete: (id: string, date: string) => void
+  onDelete: (id: string, date: string) => Promise<void>
+  onClick?: (expense: Expense) => void
 }
 
-export function ExpenseItem({ expense, onDelete }: ExpenseItemProps) {
-  const [showConfirm, setShowConfirm] = useState(false)
+export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
+  const [swipeX, setSwipeX] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
-  const category = getCategoryByKey(expense.category)
-  const confirmRef = useRef<HTMLDivElement>(null)
+  const startXRef = useRef(0)
+  const isDraggingRef = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  const [{ x }, api] = useSpring(() => ({ x: 0 }))
+  const THRESHOLD = 80
 
-  const bind = useDrag(
-    ({ down, movement: [mx], cancel }) => {
-      // Only allow left swipe
-      const newX = Math.min(0, mx)
-      
-      if (newX < -120) {
-        cancel()
-        setShowConfirm(true)
-        api.start({ x: 0 })
-        return
-      }
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    startXRef.current = e.touches[0].clientX
+    isDraggingRef.current = true
+  }, [])
 
-      api.start({ x: down ? newX : 0, immediate: down })
-    },
-    { axis: 'x' }
-  )
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDraggingRef.current) return
+    const diff = e.touches[0].clientX - startXRef.current
+    // Only allow swiping left (negative)
+    setSwipeX(Math.min(0, diff))
+  }, [])
 
-  const handleDelete = async () => {
-    setIsDeleting(true)
-    try {
+  const handleTouchEnd = useCallback(async () => {
+    isDraggingRef.current = false
+    if (Math.abs(swipeX) > THRESHOLD) {
+      setIsDeleting(true)
       await onDelete(expense.id, expense.date)
-    } finally {
-      setIsDeleting(false)
-      setShowConfirm(false)
+    } else {
+      setSwipeX(0)
+    }
+  }, [swipeX, expense, onDelete])
+
+  const handleDeleteClick = async () => {
+    setIsDeleting(true)
+    await onDelete(expense.id, expense.date)
+  }
+
+  const handleClick = () => {
+    // Only trigger click if not swiping
+    if (Math.abs(swipeX) < 5 && onClick) {
+      onClick(expense)
     }
   }
 
+  if (isDeleting) return null
+
   return (
-    <>
-      <div className="relative overflow-hidden rounded-xl mb-3">
-        {/* Delete background */}
-        <div className="absolute inset-0 bg-red-500 flex items-center justify-end pr-4">
-          <span className="text-white font-medium">Delete</span>
-        </div>
-
-        {/* Swipeable content */}
-        <AnimatedDiv
-          {...bind()}
-          style={{ x, touchAction: 'pan-y' } as any}
-          className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4 cursor-grab active:cursor-grabbing"
-        >
-          <div className="text-3xl">{category?.emoji ?? '📦'}</div>
-          
-          <div className="flex-1 min-w-0">
-            <p className="text-zinc-100 font-medium truncate">
-              {expense.note || (category?.label ?? 'Expense')}
-            </p>
-            <p className="text-sm text-zinc-400">
-              {new Date(expense.date + 'T00:00:00').toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-              })}
-            </p>
-          </div>
-
-          <div className="text-right">
-            <p className="text-lg font-semibold text-zinc-100">
-              ${expense.amount.toFixed(2)}
-            </p>
-          </div>
-        </AnimatedDiv>
+    <div className="relative overflow-hidden rounded-xl">
+      {/* Delete background */}
+      <div className="absolute inset-0 bg-red-500 flex items-center justify-end pr-4 rounded-xl">
+        <span className="text-white text-sm font-medium">Delete</span>
       </div>
 
-      {/* Confirm dialog */}
-      {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div
-            ref={confirmRef}
-            className="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 max-w-sm w-full"
-          >
-            <h3 className="text-lg font-semibold text-zinc-100 mb-2">
-              Delete expense?
-            </h3>
-            <p className="text-zinc-400 mb-6">
-              {expense.note || category?.label} — ${expense.amount.toFixed(2)}
-            </p>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="flex-1 py-3 bg-zinc-800 text-zinc-100 rounded-xl hover:bg-zinc-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="flex-1 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50"
-              >
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
+      {/* Swipeable content */}
+      <div
+        ref={containerRef}
+        className="relative flex items-center justify-between p-4 bg-zinc-900 rounded-xl transition-transform"
+        style={{ transform: `translateX(${swipeX}px)` }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">
+            {CATEGORY_ICONS[expense.category] || '📦'}
+          </span>
+          <div>
+            <p className="text-zinc-100 font-medium">{expense.category}</p>
+            {expense.note && (
+              <p className="text-zinc-500 text-sm">{expense.note}</p>
+            )}
           </div>
         </div>
-      )}
-    </>
+        <div className="flex items-center gap-3">
+          <span className="text-zinc-100 font-semibold">
+            ¥{expense.amount.toFixed(2)}
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleDeleteClick()
+            }}
+            className="text-zinc-600 hover:text-red-400 transition-colors p-1"
+            title="Delete expense"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }

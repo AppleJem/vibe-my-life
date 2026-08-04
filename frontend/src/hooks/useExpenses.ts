@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { expenseApi } from '../services/api'
-import type { Expense } from '../types/expense'
+import type { Expense, UpdateExpenseInput } from '../types/expense'
 
 export function useExpenses(yearMonth: string) {
   const [expenses, setExpenses] = useState<Expense[]>([])
@@ -32,6 +32,14 @@ export function useExpenses(yearMonth: string) {
     return expense
   }
 
+  const updateExpense = async (id: string, date: string, updates: UpdateExpenseInput) => {
+    const updated = await expenseApi.updateExpense(id, date, updates)
+    setExpenses((prev) =>
+      prev.map((e) => (e.id === id ? updated : e)).sort((a, b) => a.date.localeCompare(b.date))
+    )
+    return updated
+  }
+
   const deleteExpense = async (id: string, date: string) => {
     await expenseApi.deleteExpense(id, date)
     setExpenses((prev) => prev.filter((e) => e.id !== id))
@@ -43,6 +51,7 @@ export function useExpenses(yearMonth: string) {
     error,
     refetch: fetchExpenses,
     addExpense,
+    updateExpense,
     deleteExpense,
   }
 }

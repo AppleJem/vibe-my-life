@@ -6,7 +6,7 @@ import { ExpenseList } from '../../components/ExpenseTracker/ExpenseList'
 import { SwipeContainer } from '../../components/ExpenseTracker/SwipeContainer'
 import { AddExpenseModal } from '../../components/ExpenseTracker/AddExpenseModal/AddExpenseModal'
 import { useExpenses } from '../../hooks/useExpenses'
-import type { CreateExpenseInput } from '../../types/expense'
+import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../types/expense'
 
 export const Route = createFileRoute('/_authenticated/')({
   component: DashboardPage,
@@ -18,8 +18,9 @@ function DashboardPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   })
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
 
-  const { expenses, loading, deleteExpense, addExpense } = useExpenses(yearMonth)
+  const { expenses, loading, deleteExpense, addExpense, updateExpense } = useExpenses(yearMonth)
 
   const total = expenses.reduce((sum, e) => sum + e.amount, 0)
 
@@ -43,6 +44,20 @@ function DashboardPage() {
     await addExpense(input)
   }
 
+  const handleUpdateExpense = async (id: string, date: string, updates: UpdateExpenseInput) => {
+    await updateExpense(id, date, updates)
+  }
+
+  const handleExpenseClick = (expense: Expense) => {
+    setSelectedExpense(expense)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedExpense(null)
+  }
+
   return (
     <Layout>
       <SwipeContainer onSwipeLeft={goToNextMonth} onSwipeRight={goToPreviousMonth}>
@@ -57,12 +72,16 @@ function DashboardPage() {
           expenses={expenses}
           loading={loading}
           onDelete={deleteExpense}
+          onExpenseClick={handleExpenseClick}
         />
       </SwipeContainer>
 
       {/* FAB - Add expense */}
       <button
-        onClick={() => setIsModalOpen(true)}
+        onClick={() => {
+          setSelectedExpense(null)
+          setIsModalOpen(true)
+        }}
         className="fixed bottom-6 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-shadow"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -70,11 +89,13 @@ function DashboardPage() {
         </svg>
       </button>
 
-      {/* Add Expense Modal */}
+      {/* Add/Edit Expense Modal */}
       <AddExpenseModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleCloseModal}
         onSubmit={handleAddExpense}
+        expense={selectedExpense}
+        onUpdate={handleUpdateExpense}
       />
     </Layout>
   )
