@@ -8,6 +8,13 @@ import type {
   RecurringRuleInput,
   PropagateScope,
 } from '../types/expense'
+import type {
+  Habit,
+  CreateHabitInput,
+  UpdateHabitInput,
+  Completion,
+  CreateCompletionInput,
+} from '../types/habit'
 import type { Category } from '../constants/categories'
 
 export interface CategoryRename {
@@ -216,6 +223,68 @@ export const importApi = {
     form.append('mapping', JSON.stringify({ mappings }))
     const { data } = await api.post('/import/commit', form)
     return data
+  },
+}
+
+/**
+ * Habits are a separate life app — separate table, separate module, nothing shared with
+ * expenses but the axios instance and the token.
+ *
+ * Every completion carries the client's **local** date for the same reason the recurring
+ * calls carry `today`: the server is UTC and must not decide when a day rolls over.
+ */
+export const habitApi = {
+  async list(): Promise<Habit[]> {
+    const { data } = await api.get('/habits')
+    return data.habits
+  },
+
+  async get(id: string): Promise<Habit> {
+    const { data } = await api.get(`/habits/${id}`)
+    return data.habit
+  },
+
+  async create(input: CreateHabitInput): Promise<Habit> {
+    const { data } = await api.post('/habits', input)
+    return data.habit
+  },
+
+  async update(id: string, input: UpdateHabitInput): Promise<Habit> {
+    const { data } = await api.put(`/habits/${id}`, input)
+    return data.habit
+  },
+
+  /** Cascades — the habit's whole history goes with it. */
+  async remove(id: string): Promise<void> {
+    await api.delete(`/habits/${id}`)
+  },
+
+  async completions(habitId: string): Promise<Completion[]> {
+    const { data } = await api.get(`/habits/${habitId}/completions`)
+    return data.completions
+  },
+
+  /**
+   * Returns the updated habit alongside the completion so the list cache can be
+   * refreshed without a second round trip — `lastCompletedDate` has just moved.
+   *
+   * Rejects with a 409 if the day is already logged; the caller surfaces that rather
+   * than treating it as a generic failure.
+   */
+  async log(
+    habitId: string,
+    input: CreateCompletionInput
+  ): Promise<{ completion: Completion; habit: Habit }> {
+    const { data } = await api.post(`/habits/${habitId}/completions`, input)
+    return data
+  },
+
+  /** The timestamp is an ISO string, so it has to be escaped into the path. */
+  async unlog(habitId: string, timestamp: string): Promise<Habit> {
+    const { data } = await api.delete(
+      `/habits/${habitId}/completions/${encodeURIComponent(timestamp)}`
+    )
+    return data.habit
   },
 }
 

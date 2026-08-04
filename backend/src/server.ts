@@ -6,6 +6,7 @@ import { expenseRouter } from './modules/expense/expense.routes.js'
 import { metadataRouter } from './modules/metadata/metadata.routes.js'
 import { importRouter } from './modules/import/import.routes.js'
 import { recurringRouter } from './modules/recurring/recurring.routes.js'
+import { habitRouter } from './modules/habit/habit.routes.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { env } from './config/env.js'
 
@@ -54,6 +55,7 @@ app.use('/api/expenses', expenseRouter)
 app.use('/api/metadata', metadataRouter)
 app.use('/api/import', importRouter)
 app.use('/api/recurring', recurringRouter)
+app.use('/api/habits', habitRouter)
 
 // Error handler (must be last)
 app.use(errorHandler)
