@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react'
 import { useLongPress } from '../../hooks/useLongPress'
 import { accentOf } from '../../constants/habitColors'
+import { playChargeSwoosh, playCompletionKlang } from '../../utils/sounds'
 import type { Habit } from '../../types/habit'
 
 interface BigCheckBoxProps {
@@ -28,10 +30,33 @@ export function BigCheckBox({ habit, isDone, isSaving, onHoldComplete }: BigChec
   const accent = accentOf(habit.color)
   const disabled = isDone || isSaving
 
+  const swooshRef = useRef<ReturnType<typeof playChargeSwoosh> | null>(null)
+
   const { handlers, progress, isHolding } = useLongPress({
-    onComplete: onHoldComplete,
+    onComplete: () => {
+      // Stop the swoosh and fire the klang
+      swooshRef.current?.stop()
+      swooshRef.current = null
+      playCompletionKlang()
+      onHoldComplete()
+    },
     disabled,
   })
+
+  // Start/stop the charge swoosh when holding state changes
+  useEffect(() => {
+    if (isHolding && !isDone) {
+      swooshRef.current = playChargeSwoosh(5) // matches the 5s hold duration
+    } else {
+      swooshRef.current?.stop()
+      swooshRef.current = null
+    }
+
+    return () => {
+      swooshRef.current?.stop()
+      swooshRef.current = null
+    }
+  }, [isHolding, isDone])
 
   const caption = isDone
     ? 'Done today'
