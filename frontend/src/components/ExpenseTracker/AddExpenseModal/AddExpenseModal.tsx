@@ -477,19 +477,28 @@ export function AddExpenseModal({
             </>
           ))}
 
-        <button
-          onClick={confirmField}
-          disabled={(isLastField ? !canSave : !canAdvance) || isSubmitting}
-          className={`mt-3 w-full py-2.5 text-sm font-semibold rounded-lg shadow-lg transition-shadow disabled:opacity-50 disabled:cursor-not-allowed ${accent.button}`}
-        >
-          {isSubmitting
-            ? 'Saving...'
-            : isLastField
-            ? isEditMode
-              ? `Update ${NOUN[type]}`
-              : `Save ${NOUN[type]}`
-            : 'Confirm'}
-        </button>
+        <div className="mt-3 flex gap-3">
+          <button
+            onClick={handleSubmit}
+            disabled={!canSave || isSubmitting}
+            className={`px-4 py-2.5 text-sm font-semibold rounded-lg shadow-lg transition-shadow disabled:opacity-50 disabled:cursor-not-allowed bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100`}
+          >
+            {isSubmitting ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            onClick={confirmField}
+            disabled={(!canAdvance && !isLastField) || isSubmitting}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg shadow-lg transition-shadow disabled:opacity-50 disabled:cursor-not-allowed ${accent.button}`}
+          >
+            {isSubmitting
+              ? 'Saving...'
+              : isLastField
+              ? isEditMode
+                ? `Update ${NOUN[type]}`
+                : `Save ${NOUN[type]}`
+              : 'Next'}
+          </button>
+        </div>
       </div>
 
       <ChoiceDialog
