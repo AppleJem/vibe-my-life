@@ -6,10 +6,12 @@ import { SwipeContainer } from '../../components/ExpenseTracker/SwipeContainer'
 import { AddExpenseModal } from '../../components/ExpenseTracker/AddExpenseModal/AddExpenseModal'
 import { ViewTabs, type DashboardView } from '../../components/ExpenseTracker/ViewTabs'
 import { ImagePickerButton } from '../../components/ExpenseTracker/ImagePickerButton'
+import { VoiceRecorderButton } from '../../components/ExpenseTracker/VoiceRecorderButton'
 import { ScreenshotLoadingOverlay } from '../../components/ExpenseTracker/ScreenshotLoadingOverlay'
 import { useExpenses } from '../../hooks/useExpenses'
 import { splitByType, sumOf } from '../../utils/transaction'
-import { screenshotApi } from '../../services/api'
+import { screenshotApi, voiceApi } from '../../services/api'
+import { useCategories } from '../../contexts/MetadataContext'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../types/expense'
 
 // Lazy-load CategoryBreakdown — it pulls in recharts (~200KB)
@@ -34,9 +36,11 @@ function DashboardPage() {
   const [view, setView] = useState<DashboardView>('list')
   const [isParsingScreenshots, setIsParsingScreenshots] = useState(false)
   const [selectedImages, setSelectedImages] = useState<File[]>([])
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const { expenses, loading, deleteExpense, addExpense, updateExpense } = useExpenses(yearMonth)
+  const { categories, incomeCategories } = useCategories()
 
   // One query returns the whole month, both directions; the split is a render concern.
   const split = splitByType(expenses)
@@ -114,6 +118,48 @@ function DashboardPage() {
     }
   }, [])
 
+  const handleVoiceClick = useCallback(() => {
+    setShowVoiceRecorder(true)
+  }, [])
+
+  const handleVoiceRecordingComplete = useCallback(async (audioBlob: Blob) => {
+    setShowVoiceRecorder(false)
+    setIsParsingScreenshots(true)
+
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    try {
+      const { transcript, items } = await voiceApi.parseVoiceRecording(
+        audioBlob,
+        categories,
+        incomeCategories,
+        abortController.signal
+      )
+      console.log('Transcript:', transcript)
+      
+      // Navigate to draft page with parsed items
+      navigate({
+        to: '/expense-draft',
+        search: { items },
+      })
+    } catch (err: any) {
+      if (err.name === 'CanceledError' || err.name === 'AbortError') {
+        console.log('Voice parsing cancelled')
+      } else {
+        console.error('Failed to parse voice recording:', err)
+        alert('Failed to parse voice recording. Please try again.')
+      }
+    } finally {
+      setIsParsingScreenshots(false)
+      abortControllerRef.current = null
+    }
+  }, [navigate])
+
+  const handleVoiceCancel = useCallback(() => {
+    setShowVoiceRecorder(false)
+  }, [])
+
   return (
     <>
       <SwipeContainer onSwipeLeft={goToNextMonth} onSwipeRight={goToPreviousMonth}>
@@ -158,14 +204,23 @@ function DashboardPage() {
         />
       )}
 
-      {/* FAB - Add expense (with long press for image picker) */}
+      {/* FAB - Add expense (with long press for image/voice picker) */}
       <ImagePickerButton
         onImagesSelected={handleImagesSelected}
+        onVoiceClick={handleVoiceClick}
         onStandardClick={() => {
           setSelectedExpense(null)
           setIsModalOpen(true)
         }}
       />
+
+      {/* Voice recorder overlay */}
+      {showVoiceRecorder && (
+        <VoiceRecorderButton
+          onRecordingComplete={handleVoiceRecordingComplete}
+          onCancel={handleVoiceCancel}
+        />
+      )}
 
       {/* Add/Edit Expense Modal */}
       <AddExpenseModal

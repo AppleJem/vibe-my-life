@@ -2,11 +2,12 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 
 interface ImagePickerButtonProps {
   onImagesSelected: (files: File[]) => void
+  onVoiceClick: () => void
   onStandardClick: () => void
 }
 
-export function ImagePickerButton({ onImagesSelected, onStandardClick }: ImagePickerButtonProps) {
-  const [showImageOption, setShowImageOption] = useState(false)
+export function ImagePickerButton({ onImagesSelected, onVoiceClick, onStandardClick }: ImagePickerButtonProps) {
+  const [showOptions, setShowOptions] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
   const longPressTimer = useRef<NodeJS.Timeout | null>(null)
   const isLongPress = useRef(false)
@@ -40,7 +41,7 @@ export function ImagePickerButton({ onImagesSelected, onStandardClick }: ImagePi
     isLongPress.current = false
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true
-      setShowImageOption(true)
+      setShowOptions(true)
       // Optional: Add haptic feedback if available
       if (navigator.vibrate) {
         navigator.vibrate(50)
@@ -71,6 +72,11 @@ export function ImagePickerButton({ onImagesSelected, onStandardClick }: ImagePi
     fileInputRef.current?.click()
   }, [])
 
+  const handleVoiceOptionClick = useCallback(() => {
+    setShowOptions(false)
+    onVoiceClick()
+  }, [onVoiceClick])
+
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || [])
@@ -81,13 +87,13 @@ export function ImagePickerButton({ onImagesSelected, onStandardClick }: ImagePi
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
-      setShowImageOption(false)
+      setShowOptions(false)
     },
     [onImagesSelected]
   )
 
   const handleBackdropClick = useCallback(() => {
-    setShowImageOption(false)
+    setShowOptions(false)
   }, [])
 
   return (
@@ -102,8 +108,8 @@ export function ImagePickerButton({ onImagesSelected, onStandardClick }: ImagePi
         onChange={handleFileChange}
       />
 
-      {/* Image option popup */}
-      {showImageOption && (
+      {/* Options popup */}
+      {showOptions && (
         <>
           {/* Backdrop to close the popup */}
           <div
@@ -111,6 +117,30 @@ export function ImagePickerButton({ onImagesSelected, onStandardClick }: ImagePi
             onClick={handleBackdropClick}
           />
           
+          {/* Voice recorder button */}
+          <button
+            onClick={handleVoiceOptionClick}
+            className={`fixed bottom-64 right-6 w-14 h-14 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/25 flex items-center justify-center hover:shadow-emerald-500/40 transition-all duration-300 ease-in-out z-50 animate-in fade-in slide-in-from-bottom-2 ${
+              isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+            }`}
+            title="Add expense by voice"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6 text-white"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+              />
+            </svg>
+          </button>
+
           {/* Image picker button */}
           <button
             onClick={handleImageOptionClick}

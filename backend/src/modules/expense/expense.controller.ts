@@ -59,6 +59,7 @@ export const expenseController = {
   },
 
   async getExpenses(req: Request, res: Response) {
+    console.log('getExpenses', req.query)
     const month = req.query.month as string
 
     if (!month || !/^\d{4}-\d{2}$/.test(month)) {
@@ -126,10 +127,10 @@ export const expenseController = {
     for (const item of items) {
       const parsed = createExpenseSchema.safeParse(item)
       if (!parsed.success) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'Invalid item in array',
           details: parsed.error.flatten(),
-          item 
+          item
         })
       }
       validatedItems.push(parsed.data)

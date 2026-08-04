@@ -28,6 +28,9 @@ const envSchema = z.object({
         .map((url) => url.trim().replace(/\/$/, ''))
         .filter(Boolean)
     ),
+
+  // Groq API Key (for ASR)
+  GROQ_API_KEY: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)

@@ -7,6 +7,7 @@ import { metadataRouter } from './modules/metadata/metadata.routes.js'
 import { importRouter } from './modules/import/import.routes.js'
 import { recurringRouter } from './modules/recurring/recurring.routes.js'
 import { screenshotRouter } from './modules/screenshot/screenshot.routes.js'
+import { voiceRouter } from './modules/voice/voice.routes.js'
 import { habitRouter } from './modules/habit/habit.routes.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { env } from './config/env.js'
@@ -57,6 +58,7 @@ app.use('/api/metadata', metadataRouter)
 app.use('/api/import', importRouter)
 app.use('/api/recurring', recurringRouter)
 app.use('/api/screenshot', screenshotRouter)
+app.use('/api/voice', voiceRouter)
 app.use('/api/habits', habitRouter)
 
 // Error handler (must be last)

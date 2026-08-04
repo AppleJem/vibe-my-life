@@ -328,3 +328,33 @@ export const screenshotApi = {
     return data.expenses
   },
 }
+
+export interface VoiceParseResult {
+  transcript: string
+  items: ParsedExpenseItem[]
+}
+
+export interface VoiceCategory {
+  name: string
+  subcategories: string[]
+}
+
+export const voiceApi = {
+  async parseVoiceRecording(
+    audioBlob: Blob,
+    categories: VoiceCategory[],
+    incomeCategories: VoiceCategory[],
+    signal?: AbortSignal
+  ): Promise<VoiceParseResult> {
+    const form = new FormData()
+    // Determine file extension from blob type
+    const ext = audioBlob.type.includes('ogg') ? 'ogg' : 
+                audioBlob.type.includes('mp4') ? 'mp4' : 
+                audioBlob.type.includes('wav') ? 'wav' : 'webm'
+    form.append('audio', audioBlob, `recording.${ext}`)
+    form.append('categories', JSON.stringify(categories))
+    form.append('incomeCategories', JSON.stringify(incomeCategories))
+    const { data } = await api.post('/voice/parse', form, { signal })
+    return data
+  },
+}
