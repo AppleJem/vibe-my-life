@@ -8,7 +8,7 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="flex min-h-dvh flex-col bg-zinc-950">
       <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-sm border-b border-zinc-800">
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold text-pink-500">
@@ -40,8 +40,9 @@ export function Layout({ children }: LayoutProps) {
         </div>
       </header>
 
-      {/* Extra bottom padding clears the dashboard's fixed tab bar and FAB. */}
-      <main className="max-w-lg mx-auto px-4 pt-6 pb-28">
+      {/* Extra bottom padding clears the dashboard's fixed tab bar and FAB.
+          The flex column lets a page fill exactly the space left below the header. */}
+      <main className="flex flex-1 flex-col w-full max-w-lg mx-auto px-4 pt-6 pb-28">
         {children}
       </main>
     </div>

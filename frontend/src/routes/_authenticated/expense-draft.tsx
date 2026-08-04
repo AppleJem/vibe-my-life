@@ -109,7 +109,7 @@ function ExpenseDraftPage() {
 
   if (draftItems.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-4">
+      <div className="flex flex-1 flex-col items-center justify-center px-4 -mt-6 -mb-28">
         <div className="text-6xl mb-4">📷</div>
         <h2 className="text-xl font-semibold text-zinc-100 mb-2">No Items Found</h2>
         <p className="text-sm text-zinc-400 mb-6 text-center">
@@ -126,7 +126,9 @@ function ExpenseDraftPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    // Cancels the Layout's page padding: this screen is its own edge-to-edge
+    // surface with a bottom-anchored action bar, not a padded content block.
+    <div className="flex flex-1 min-h-0 flex-col -mx-4 -mt-6 -mb-28">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <button
