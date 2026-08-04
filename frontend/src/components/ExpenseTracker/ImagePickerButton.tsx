@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 interface ImagePickerButtonProps {
   onImagesSelected: (files: File[]) => void
@@ -7,9 +7,34 @@ interface ImagePickerButtonProps {
 
 export function ImagePickerButton({ onImagesSelected, onStandardClick }: ImagePickerButtonProps) {
   const [showImageOption, setShowImageOption] = useState(false)
+  const [isVisible, setIsVisible] = useState(true)
   const longPressTimer = useRef<NodeJS.Timeout | null>(null)
   const isLongPress = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const lastScrollY = useRef(0)
+
+  // Show/hide FAB based on scroll direction
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      const scrollDelta = currentScrollY - lastScrollY.current
+      
+      // Only toggle after a small threshold to avoid jitter
+      if (Math.abs(scrollDelta) > 10) {
+        if (scrollDelta > 0 && currentScrollY > 50) {
+          // Scrolling down & past initial area — hide
+          setIsVisible(false)
+        } else if (scrollDelta < 0) {
+          // Scrolling up — show
+          setIsVisible(true)
+        }
+        lastScrollY.current = currentScrollY
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const handlePointerDown = useCallback(() => {
     isLongPress.current = false
@@ -89,7 +114,9 @@ export function ImagePickerButton({ onImagesSelected, onStandardClick }: ImagePi
           {/* Image picker button */}
           <button
             onClick={handleImageOptionClick}
-            className="fixed bottom-44 right-6 w-14 h-14 bg-violet-500 rounded-full shadow-lg shadow-violet-500/25 flex items-center justify-center hover:shadow-violet-500/40 transition-all z-50 animate-in fade-in slide-in-from-bottom-2"
+            className={`fixed bottom-44 right-6 w-14 h-14 bg-violet-500 rounded-full shadow-lg shadow-violet-500/25 flex items-center justify-center hover:shadow-violet-500/40 transition-all duration-300 ease-in-out z-50 animate-in fade-in slide-in-from-bottom-2 ${
+              isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+            }`}
             title="Parse expenses from screenshot"
           >
             <svg
@@ -116,7 +143,9 @@ export function ImagePickerButton({ onImagesSelected, onStandardClick }: ImagePi
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
         onContextMenu={(e) => e.preventDefault()}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-shadow z-50"
+        className={`fixed bottom-24 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-all duration-300 ease-in-out z-50 ${
+          isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+        }`}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
