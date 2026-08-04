@@ -16,18 +16,19 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, etc)
     if (!origin) return callback(null, true)
-    
+
     // Allow localhost on any port in development
     const allowedOrigins = [
       env.FRONTEND_URL,
       'http://localhost:5173',
       'http://localhost:5174',
       'http://localhost:3000',
+      'http://192.168.68.102:5173',
     ]
-    
+
     // Allow Railway domains (*.up.railway.app)
     const isRailwayDomain = origin.endsWith('.up.railway.app')
-    
+
     if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:') || isRailwayDomain) {
       callback(null, true)
     } else {

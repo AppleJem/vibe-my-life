@@ -1,8 +1,9 @@
-import { useRef, useState, useCallback } from 'react'
+import { useState } from 'react'
 import type { Expense } from '../../types/expense'
 import { displayCategory } from '../../constants/categories'
 import { useCurrency } from '../../contexts/MetadataContext'
 import { formatAmount } from '../../utils/currency'
+import { ConfirmDialog } from '../ConfirmDialog'
 
 interface ExpenseItemProps {
   expense: Expense
@@ -12,66 +13,26 @@ interface ExpenseItemProps {
 
 export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
   const { baseCurrency } = useCurrency()
-  const [swipeX, setSwipeX] = useState(0)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
-  const startXRef = useRef(0)
-  const isDraggingRef = useRef(false)
-  const containerRef = useRef<HTMLDivElement>(null)
 
-  const THRESHOLD = 80
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    startXRef.current = e.touches[0].clientX
-    isDraggingRef.current = true
-  }, [])
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDraggingRef.current) return
-    const diff = e.touches[0].clientX - startXRef.current
-    // Only allow swiping left (negative)
-    setSwipeX(Math.min(0, diff))
-  }, [])
-
-  const handleTouchEnd = useCallback(async () => {
-    isDraggingRef.current = false
-    if (Math.abs(swipeX) > THRESHOLD) {
-      setIsDeleting(true)
-      await onDelete(expense.id, expense.date)
-    } else {
-      setSwipeX(0)
-    }
-  }, [swipeX, expense, onDelete])
-
-  const handleDeleteClick = async () => {
+  const handleConfirmDelete = async () => {
     setIsDeleting(true)
-    await onDelete(expense.id, expense.date)
-  }
-
-  const handleClick = () => {
-    // Only trigger click if not swiping
-    if (Math.abs(swipeX) < 5 && onClick) {
-      onClick(expense)
+    try {
+      await onDelete(expense.id, expense.date)
+    } finally {
+      setIsDeleting(false)
+      setConfirmOpen(false)
     }
   }
 
-  if (isDeleting) return null
+  const amountLabel = formatAmount(expense.amount, expense.baseCurrency ?? baseCurrency)
 
   return (
     <div className="relative overflow-hidden rounded-xl">
-      {/* Delete background */}
-      <div className="absolute inset-0 bg-red-500 flex items-center justify-end pr-4 rounded-xl">
-        <span className="text-white text-sm font-medium">Delete</span>
-      </div>
-
-      {/* Swipeable content */}
       <div
-        ref={containerRef}
-        className="relative flex items-center justify-between p-4 bg-zinc-900 rounded-xl transition-transform"
-        style={{ transform: `translateX(${swipeX}px)` }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={handleClick}
+        className="relative flex items-center justify-between p-4 bg-zinc-900 rounded-xl"
+        onClick={() => onClick?.(expense)}
       >
         <div className="flex items-center gap-3">
           <div>
@@ -85,9 +46,7 @@ export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
           {/* Base-currency value leads; the amount as actually spent sits underneath.
               Legacy rows have no `currency` and stay single-line. */}
           <div className="text-right">
-            <span className="text-zinc-100 font-semibold">
-              {formatAmount(expense.amount, expense.baseCurrency ?? baseCurrency)}
-            </span>
+            <span className="text-zinc-100 font-semibold">{amountLabel}</span>
             {expense.currency && expense.originalAmount != null && (
               <p className="text-zinc-500 text-xs">
                 {formatAmount(expense.originalAmount, expense.currency)}
@@ -97,7 +56,7 @@ export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
           <button
             onClick={(e) => {
               e.stopPropagation()
-              handleDeleteClick()
+              setConfirmOpen(true)
             }}
             className="text-zinc-600 hover:text-red-400 transition-colors p-1"
             title="Delete expense"
@@ -108,6 +67,15 @@ export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmOpen}
+        title="Delete this expense?"
+        message={`${displayCategory(expense.category)} · ${amountLabel}`}
+        isConfirming={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   )
 }

@@ -27,7 +27,7 @@ export function SwipeContainer({ children, onSwipeLeft, onSwipeRight }: SwipeCon
         api.start({ x: 0 })
         return
       }
-      
+
       // Limit drag distance
       const clampedX = Math.max(-150, Math.min(150, mx))
       api.start({ x: clampedX, immediate: true })
