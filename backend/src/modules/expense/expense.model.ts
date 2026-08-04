@@ -15,6 +15,12 @@ export const expenseModel = {
       category: input.category,
       note: input.note ?? '',
       createdAt: now,
+      // Only spread the currency fields that were actually provided — DynamoDB
+      // rejects explicit `undefined` attribute values.
+      ...(input.baseCurrency !== undefined && { baseCurrency: input.baseCurrency }),
+      ...(input.currency !== undefined && { currency: input.currency }),
+      ...(input.originalAmount !== undefined && { originalAmount: input.originalAmount }),
+      ...(input.rate !== undefined && { rate: input.rate }),
     }
 
     await docClient.send(new PutCommand({
@@ -111,36 +117,41 @@ export const expenseModel = {
   },
 
   async update(userId: string, date: string, expenseId: string, updates: UpdateExpenseInput): Promise<Expense> {
-    const updateExpressions: string[] = []
+    const UPDATABLE = [
+      'date', 'amount', 'category', 'note',
+      'baseCurrency', 'currency', 'originalAmount', 'rate',
+    ] as const
+
+    const setExpressions: string[] = []
+    const removeExpressions: string[] = []
     const expressionAttributeValues: Record<string, unknown> = {}
     const expressionAttributeNames: Record<string, string> = {}
 
-    if (updates.date !== undefined) {
-      updateExpressions.push('#date = :date')
-      expressionAttributeValues[':date'] = updates.date
-      expressionAttributeNames['#date'] = 'date'
-    }
-    if (updates.amount !== undefined) {
-      updateExpressions.push('#amount = :amount')
-      expressionAttributeValues[':amount'] = updates.amount
-      expressionAttributeNames['#amount'] = 'amount'
-    }
-    if (updates.category !== undefined) {
-      updateExpressions.push('#category = :category')
-      expressionAttributeValues[':category'] = updates.category
-      expressionAttributeNames['#category'] = 'category'
-    }
-    if (updates.note !== undefined) {
-      updateExpressions.push('#note = :note')
-      expressionAttributeValues[':note'] = updates.note
-      expressionAttributeNames['#note'] = 'note'
+    for (const field of UPDATABLE) {
+      const value = updates[field]
+      if (value === undefined) continue
+
+      expressionAttributeNames[`#${field}`] = field
+
+      // An explicit null clears the attribute — a foreign-currency expense edited
+      // back to the base currency has to shed currency/originalAmount/rate entirely.
+      if (value === null) {
+        removeExpressions.push(`#${field}`)
+      } else {
+        setExpressions.push(`#${field} = :${field}`)
+        expressionAttributeValues[`:${field}`] = value
+      }
     }
 
-    if (updateExpressions.length === 0) {
+    if (setExpressions.length === 0 && removeExpressions.length === 0) {
       const existing = await this.getById(userId, date, expenseId)
       if (!existing) throw new Error('Expense not found')
       return existing
     }
+
+    const clauses: string[] = []
+    if (setExpressions.length > 0) clauses.push(`SET ${setExpressions.join(', ')}`)
+    if (removeExpressions.length > 0) clauses.push(`REMOVE ${removeExpressions.join(', ')}`)
 
     const result = await docClient.send(new UpdateCommand({
       TableName: TABLE_NAME,
@@ -148,9 +159,10 @@ export const expenseModel = {
         PK: `USER#${userId}`,
         SK: `EXPENSE#${date}#${expenseId}`,
       },
-      UpdateExpression: `SET ${updateExpressions.join(', ')}`,
-      ExpressionAttributeValues: expressionAttributeValues,
-      ExpressionAttributeNames: Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
+      UpdateExpression: clauses.join(' '),
+      ExpressionAttributeValues:
+        Object.keys(expressionAttributeValues).length > 0 ? expressionAttributeValues : undefined,
+      ExpressionAttributeNames: expressionAttributeNames,
       ReturnValues: 'ALL_NEW',
     }))
 

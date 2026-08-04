@@ -1,6 +1,6 @@
-import { PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient, TABLE_NAME } from '../../config/db.js'
-import type { Category, ExpenseMetadata } from './metadata.types.d.js'
+import type { Category, ExpenseMetadata, MetadataPatch } from './metadata.types.d.js'
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { name: '🍜 Food', subcategories: [] },
@@ -17,6 +17,15 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { name: '📦 Other', subcategories: [] },
 ]
 
+export const DEFAULT_BASE_CURRENCY = 'SGD'
+
+const toMetadata = (item: Record<string, unknown>): ExpenseMetadata => ({
+  categories: (item.categories ?? []) as Category[],
+  baseCurrency: (item.baseCurrency ?? DEFAULT_BASE_CURRENCY) as string,
+  currencies: (item.currencies ?? []) as string[],
+  updatedAt: (item.updatedAt ?? '') as string,
+})
+
 export const metadataModel = {
   async get(userId: string): Promise<ExpenseMetadata | null> {
     const result = await docClient.send(new GetCommand({
@@ -29,27 +38,37 @@ export const metadataModel = {
 
     if (!result.Item) return null
 
-    return {
-      categories: (result.Item.categories ?? []) as Category[],
-      updatedAt: (result.Item.updatedAt ?? '') as string,
-    }
+    return toMetadata(result.Item)
   },
 
-  async put(userId: string, categories: Category[]): Promise<ExpenseMetadata> {
-    const metadata: ExpenseMetadata = {
-      categories,
-      updatedAt: new Date().toISOString(),
+  /**
+   * Writes only the provided fields, so saving currency settings can't clobber
+   * categories (and vice versa). Creates the META item if it doesn't exist yet.
+   */
+  async patch(userId: string, fields: MetadataPatch): Promise<ExpenseMetadata> {
+    const setExpressions = ['#updatedAt = :updatedAt']
+    const names: Record<string, string> = { '#updatedAt': 'updatedAt' }
+    const values: Record<string, unknown> = { ':updatedAt': new Date().toISOString() }
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === undefined) continue
+      setExpressions.push(`#${key} = :${key}`)
+      names[`#${key}`] = key
+      values[`:${key}`] = value
     }
 
-    await docClient.send(new PutCommand({
+    const result = await docClient.send(new UpdateCommand({
       TableName: TABLE_NAME,
-      Item: {
+      Key: {
         PK: `USER#${userId}`,
         SK: 'META',
-        ...metadata,
       },
+      UpdateExpression: `SET ${setExpressions.join(', ')}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+      ReturnValues: 'ALL_NEW',
     }))
 
-    return metadata
+    return toMetadata(result.Attributes ?? {})
   },
 }

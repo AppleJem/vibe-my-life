@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { authApi } from '../services/api'
-import { CategoriesProvider } from '../contexts/CategoriesContext'
+import { MetadataProvider } from '../contexts/MetadataContext'
 import { Layout } from '../components/Layout'
 
 export const Route = createFileRoute('/_authenticated')({
@@ -13,10 +13,10 @@ export const Route = createFileRoute('/_authenticated')({
     }
   },
   component: () => (
-    <CategoriesProvider>
+    <MetadataProvider>
       <Layout>
         <Outlet />
       </Layout>
-    </CategoriesProvider>
+    </MetadataProvider>
   ),
 })

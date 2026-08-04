@@ -1,3 +1,6 @@
+import { useCurrency } from '../../contexts/MetadataContext'
+import { formatAmount } from '../../utils/currency'
+
 interface MonthHeaderProps {
   yearMonth: string  // "2026-08"
   total: number
@@ -6,6 +9,7 @@ interface MonthHeaderProps {
 }
 
 export function MonthHeader({ yearMonth, total, onPrevious, onNext }: MonthHeaderProps) {
+  const { baseCurrency } = useCurrency()
   const [year, month] = yearMonth.split('-').map(Number)
   const monthName = new Date(year, month - 1).toLocaleString('en-US', {
     month: 'long',
@@ -39,7 +43,7 @@ export function MonthHeader({ yearMonth, total, onPrevious, onNext }: MonthHeade
       <div className="text-center">
         <p className="text-sm text-zinc-400">Total</p>
         <p className="text-2xl font-bold text-zinc-100">
-          ${total.toFixed(2)}
+          {formatAmount(total, baseCurrency)}
         </p>
       </div>
     </div>

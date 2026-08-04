@@ -30,6 +30,16 @@ function SettingsPage() {
 
       <div className="bg-zinc-900 rounded-xl overflow-hidden">
         <button
+          onClick={() => navigate({ to: '/settings/currency' })}
+          className="w-full flex items-center justify-between px-4 py-4 border-b border-zinc-800 hover:bg-zinc-800 transition-colors"
+        >
+          <span className="text-zinc-100">Currency</span>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        <button
           onClick={() => navigate({ to: '/settings/categories' })}
           className="w-full flex items-center justify-between px-4 py-4 border-b border-zinc-800 hover:bg-zinc-800 transition-colors"
         >

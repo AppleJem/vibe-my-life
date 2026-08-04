@@ -1,11 +1,14 @@
 import { useState } from 'react'
+import { formatAmount } from '../../../utils/currency'
 
 interface CalculatorProps {
   value: number
   onChange: (amount: number) => void
+  /** Currency the typed amount is in — drives the display symbol only. */
+  currency: string
 }
 
-export function Calculator({ value, onChange }: CalculatorProps) {
+export function Calculator({ value, onChange, currency }: CalculatorProps) {
   const [expression, setExpression] = useState(value > 0 ? String(value) : '')
   const [result, setResult] = useState<number | null>(value > 0 ? value : null)
 
@@ -105,7 +108,7 @@ export function Calculator({ value, onChange }: CalculatorProps) {
           {expression || '0'}
         </div>
         <div className="text-right text-zinc-100 text-xl font-bold leading-tight">
-          {result !== null ? `¥${result.toFixed(2)}` : '¥0.00'}
+          {formatAmount(result ?? 0, currency)}
         </div>
       </div>
 

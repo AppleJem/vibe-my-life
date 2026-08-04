@@ -1,4 +1,6 @@
 import { ExpenseItem } from './ExpenseItem'
+import { useCurrency } from '../../contexts/MetadataContext'
+import { formatAmount } from '../../utils/currency'
 import type { Expense } from '../../types/expense'
 
 interface ExpenseListProps {
@@ -9,6 +11,8 @@ interface ExpenseListProps {
 }
 
 export function ExpenseList({ expenses, loading, onDelete, onExpenseClick }: ExpenseListProps) {
+  const { baseCurrency } = useCurrency()
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -52,7 +56,7 @@ export function ExpenseList({ expenses, loading, onDelete, onExpenseClick }: Exp
           <div key={date}>
             <div className="flex justify-between items-center mb-2">
               <p className="text-zinc-400 text-xs font-medium">{date}</p>
-              <p className="text-zinc-500 text-xs">¥{dayTotal.toFixed(2)}</p>
+              <p className="text-zinc-500 text-xs">{formatAmount(dayTotal, baseCurrency)}</p>
             </div>
             <div className="space-y-2">
               {dayExpenses.map((expense) => (

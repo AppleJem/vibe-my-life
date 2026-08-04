@@ -75,3 +75,20 @@
 - [x] Transition animations
 - [x] Responsive tweaks
 - [ ] Test all flows end-to-end
+
+## Phase 10: Multi-currency
+- [x] Add `baseCurrency` / `currency` / `originalAmount` / `rate` to the `Expense` type (backend + frontend mirrors)
+- [x] Extend expense zod schemas; `null` on the foreign fields clears them
+- [x] Rework `expenseModel.update` to emit `SET` **and** `REMOVE` clauses
+- [x] Add `baseCurrency` / `currencies` to `ExpenseMetadata`
+- [x] Replace `metadataModel.put` with a partial `patch` so slices can't clobber each other
+- [x] Add `PUT /api/metadata/currency`
+- [x] Create `constants/currencies.ts` — symbols + per-currency decimal places
+- [x] Create `utils/currency.ts` — `formatAmount`, `toBase`, `formatRate` (directional)
+- [x] Create `services/rates.ts` — open.er-api.com fetch, 1-day localStorage cache
+- [x] Merge `CategoriesContext` into `MetadataContext` (one metadata fetch, two hooks)
+- [x] Create `routes/_authenticated/settings/currency.tsx`
+- [x] Add currency selector to `AddExpenseModal`; last-used currency persists in localStorage
+- [x] Route all five hardcoded `¥`/`$` sites through `formatAmount`
+- [x] Two-line display in `ExpenseItem` (base amount, foreign amount below)
+- [ ] Walk the UI flows manually (settings page, foreign entry, edit, offline)

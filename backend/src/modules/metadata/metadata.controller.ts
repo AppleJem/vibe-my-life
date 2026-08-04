@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { metadataModel, DEFAULT_CATEGORIES } from './metadata.model.js'
+import { metadataModel, DEFAULT_CATEGORIES, DEFAULT_BASE_CURRENCY } from './metadata.model.js'
 import { expenseModel } from '../expense/expense.model.js'
 
 const categoryName = z
@@ -18,6 +18,16 @@ const categorySchema = z.object({
     .array(categoryName)
     .default([])
     .refine(hasNoDuplicates, 'Subcategory names must be unique'),
+})
+
+const currencyCode = z.string().regex(/^[A-Z]{3}$/, 'Must be a 3-letter ISO currency code')
+
+const saveCurrencySchema = z.object({
+  baseCurrency: currencyCode,
+  currencies: z
+    .array(currencyCode)
+    .default([])
+    .refine(hasNoDuplicates, 'Currencies must be unique'),
 })
 
 const saveCategoriesSchema = z.object({
@@ -40,7 +50,11 @@ export const metadataController = {
       }
 
       // First load for this user: seed the defaults so the shape is always present
-      const metadata = await metadataModel.put(req.userId!, DEFAULT_CATEGORIES)
+      const metadata = await metadataModel.patch(req.userId!, {
+        categories: DEFAULT_CATEGORIES,
+        baseCurrency: DEFAULT_BASE_CURRENCY,
+        currencies: [],
+      })
       return res.json({ metadata })
     } catch (err) {
       console.error('Error fetching metadata:', err)
@@ -71,11 +85,31 @@ export const metadataController = {
         updatedCount += await expenseModel.renameCategory(req.userId!, from, to)
       }
 
-      const metadata = await metadataModel.put(req.userId!, categories)
+      const metadata = await metadataModel.patch(req.userId!, { categories })
       return res.json({ metadata, updatedCount })
     } catch (err) {
       console.error('Error saving categories:', err)
       return res.status(500).json({ error: 'Failed to save categories' })
+    }
+  },
+
+  async saveCurrency(req: Request, res: Response) {
+    const parsed = saveCurrencySchema.safeParse(req.body)
+
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() })
+    }
+
+    const { baseCurrency } = parsed.data
+    // The base is implicit in the list the client renders, so never store it twice.
+    const currencies = parsed.data.currencies.filter((code) => code !== baseCurrency)
+
+    try {
+      const metadata = await metadataModel.patch(req.userId!, { baseCurrency, currencies })
+      return res.json({ metadata })
+    } catch (err) {
+      console.error('Error saving currency settings:', err)
+      return res.status(500).json({ error: 'Failed to save currency settings' })
     }
   },
 }

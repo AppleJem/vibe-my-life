@@ -1,6 +1,8 @@
 import { useRef, useState, useCallback } from 'react'
 import type { Expense } from '../../types/expense'
 import { displayCategory } from '../../constants/categories'
+import { useCurrency } from '../../contexts/MetadataContext'
+import { formatAmount } from '../../utils/currency'
 
 interface ExpenseItemProps {
   expense: Expense
@@ -9,6 +11,7 @@ interface ExpenseItemProps {
 }
 
 export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
+  const { baseCurrency } = useCurrency()
   const [swipeX, setSwipeX] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
   const startXRef = useRef(0)
@@ -79,9 +82,18 @@ export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-zinc-100 font-semibold">
-            ¥{expense.amount.toFixed(2)}
-          </span>
+          {/* Base-currency value leads; the amount as actually spent sits underneath.
+              Legacy rows have no `currency` and stay single-line. */}
+          <div className="text-right">
+            <span className="text-zinc-100 font-semibold">
+              {formatAmount(expense.amount, expense.baseCurrency ?? baseCurrency)}
+            </span>
+            {expense.currency && expense.originalAmount != null && (
+              <p className="text-zinc-500 text-xs">
+                {formatAmount(expense.originalAmount, expense.currency)}
+              </p>
+            )}
+          </div>
           <button
             onClick={(e) => {
               e.stopPropagation()

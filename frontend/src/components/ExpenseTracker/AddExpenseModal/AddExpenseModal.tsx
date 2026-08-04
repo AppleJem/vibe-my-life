@@ -4,6 +4,8 @@ import { Calculator } from './Calculator'
 import { CategoryPicker } from './CategoryPicker'
 import { NoteInput } from './NoteInput'
 import { displayCategory } from '../../../constants/categories'
+import { useCurrency } from '../../../contexts/MetadataContext'
+import { formatAmount, formatRate, toBase } from '../../../utils/currency'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../../types/expense'
 
 interface AddExpenseModalProps {
@@ -35,9 +37,13 @@ export function AddExpenseModal({
 
   const isEditMode = !!expense
 
+  const { baseCurrency, currencies, rates, inputCurrency, setInputCurrency } = useCurrency()
+
   const [activeField, setActiveField] = useState<Field>('date')
   const [date, setDate] = useState(todayStr)
+  // The amount as typed, in `currency` — not necessarily the base currency.
   const [amount, setAmount] = useState(0)
+  const [currency, setCurrency] = useState(baseCurrency)
   const [category, setCategory] = useState('')
   const [note, setNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -46,14 +52,36 @@ export function AddExpenseModal({
   useEffect(() => {
     if (!isOpen) return
     setDate(expense?.date ?? todayStr)
-    setAmount(expense?.amount ?? 0)
+    setAmount(expense?.originalAmount ?? expense?.amount ?? 0)
+    setCurrency(expense?.currency ?? expense?.baseCurrency ?? inputCurrency)
     setCategory(expense?.category ?? '')
     setNote(expense?.note ?? '')
     setActiveField('date')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, expense])
 
-  const canSave = !!date && amount > 0 && !!category
+  const isForeign = currency !== baseCurrency
+
+  // Reuse the rate the expense was saved at whenever the currency pair is unchanged,
+  // so editing a note never silently re-prices an old expense at today's rate.
+  const storedRateApplies =
+    isEditMode &&
+    expense?.currency === currency &&
+    expense?.baseCurrency === baseCurrency &&
+    expense?.rate != null
+
+  const rate = storedRateApplies ? expense!.rate! : rates[currency]
+  const canConvert = !isForeign || (typeof rate === 'number' && rate > 0)
+
+  const baseAmount = isForeign && canConvert ? toBase(amount, rate!, baseCurrency) : amount
+
+  const canSave = !!date && amount > 0 && !!category && canConvert
+
+  const selectCurrency = (code: string) => {
+    setCurrency(code)
+    // Remembered for the next entry — travelling shouldn't mean reselecting every time.
+    setInputCurrency(code)
+  }
 
   const fieldSummary = (key: Field) => {
     switch (key) {
@@ -65,8 +93,14 @@ export function AddExpenseModal({
           day: 'numeric',
         })
       }
-      case 'amount':
-        return amount > 0 ? `¥${amount.toFixed(2)}` : '—'
+      case 'amount': {
+        if (amount <= 0) return '—'
+        const typed = formatAmount(amount, currency)
+        if (!isForeign) return typed
+        return canConvert
+          ? `${typed} · ${formatAmount(baseAmount, baseCurrency)}`
+          : `${typed} · no rate`
+      }
       case 'category':
         return category ? displayCategory(category) : '—'
       case 'note':
@@ -79,7 +113,7 @@ export function AddExpenseModal({
       case 'date':
         return !!date
       case 'amount':
-        return amount > 0
+        return amount > 0 && canConvert
       case 'category':
         return !!category
       case 'note':
@@ -103,9 +137,27 @@ export function AddExpenseModal({
     setIsSubmitting(true)
     try {
       if (isEditMode && expense && onUpdate) {
-        await onUpdate(expense.id, expense.date, { date, amount, category, note })
+        await onUpdate(expense.id, expense.date, {
+          date,
+          amount: baseAmount,
+          category,
+          note,
+          baseCurrency,
+          // Explicit nulls clear the stored foreign fields when an expense is
+          // edited back to the base currency.
+          currency: isForeign ? currency : null,
+          originalAmount: isForeign ? amount : null,
+          rate: isForeign ? rate! : null,
+        })
       } else {
-        await onSubmit({ date, amount, category, note })
+        await onSubmit({
+          date,
+          amount: baseAmount,
+          category,
+          note,
+          baseCurrency,
+          ...(isForeign && { currency, originalAmount: amount, rate: rate! }),
+        })
       }
       onClose()
     } catch (err) {
@@ -116,6 +168,8 @@ export function AddExpenseModal({
   }
 
   if (!isOpen) return null
+
+  const hasRates = Object.keys(rates).length > 0
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-zinc-900">
@@ -169,8 +223,48 @@ export function AddExpenseModal({
 
       {/* Input for the active field, pinned to the bottom */}
       <div className="border-t border-zinc-800 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {/* Currency selector sits above the inputs and applies to the whole entry */}
+        {currencies.length > 1 && (
+          <div className="mb-3">
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {currencies.map((code) => {
+                const isBase = code === baseCurrency
+                const disabled = !isBase && !hasRates
+                return (
+                  <button
+                    key={code}
+                    onClick={() => selectCurrency(code)}
+                    disabled={disabled}
+                    className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                      code === currency
+                        ? 'bg-pink-500 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:text-zinc-100'
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    {code}
+                  </button>
+                )
+              })}
+            </div>
+            {isForeign && (
+              <p className="text-xs text-zinc-500 mt-1 px-1">
+                {canConvert
+                  ? `Saved as ${formatAmount(baseAmount, baseCurrency)} · ${formatRate(baseCurrency, currency, rate!)}`
+                  : 'Exchange rate unavailable — connect to the internet to use this currency.'}
+              </p>
+            )}
+            {!hasRates && !isForeign && (
+              <p className="text-xs text-zinc-600 mt-1 px-1">
+                Exchange rates unavailable — only {baseCurrency} can be used right now.
+              </p>
+            )}
+          </div>
+        )}
+
         {activeField === 'date' && <DatePicker value={date} onChange={setDate} />}
-        {activeField === 'amount' && <Calculator value={amount} onChange={setAmount} />}
+        {activeField === 'amount' && (
+          <Calculator value={amount} onChange={setAmount} currency={currency} />
+        )}
         {activeField === 'category' && (
           <CategoryPicker value={category} onChange={setCategory} />
         )}

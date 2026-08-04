@@ -1,4 +1,4 @@
-import { useCategories } from '../../../contexts/CategoriesContext'
+import { useCategories } from '../../../contexts/MetadataContext'
 import { parseCategory, formatCategory, type Category } from '../../../constants/categories'
 
 interface CategoryPickerProps {

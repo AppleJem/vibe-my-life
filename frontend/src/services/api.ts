@@ -9,6 +9,9 @@ export interface CategoryRename {
 
 export interface ExpenseMetadata {
   categories: Category[]
+  baseCurrency: string
+  /** Additional currencies; never includes baseCurrency. */
+  currencies: string[]
   updatedAt: string
 }
 
@@ -87,6 +90,11 @@ export const metadataApi = {
     renames: CategoryRename[] = []
   ): Promise<ExpenseMetadata> {
     const { data } = await api.put('/metadata/categories', { categories, renames })
+    return data.metadata
+  },
+
+  async saveCurrency(baseCurrency: string, currencies: string[]): Promise<ExpenseMetadata> {
+    const { data } = await api.put('/metadata/currency', { baseCurrency, currencies })
     return data.metadata
   },
 }

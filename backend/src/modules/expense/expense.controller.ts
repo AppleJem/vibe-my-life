@@ -2,18 +2,30 @@ import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { expenseModel } from './expense.model.js'
 
+const currencyCode = z.string().regex(/^[A-Z]{3}$/, 'Must be a 3-letter ISO currency code')
+
 const createExpenseSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
   amount: z.number().positive('Amount must be positive'),
   category: z.string().min(1, 'Category is required'),
   note: z.string().optional().default(''),
+  baseCurrency: currencyCode.optional(),
+  currency: currencyCode.optional(),
+  originalAmount: z.number().positive().optional(),
+  rate: z.number().positive().optional(),
 })
 
+// null is accepted on the three foreign fields so the client can clear them when an
+// expense is edited back to the base currency.
 const updateExpenseSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   amount: z.number().positive().optional(),
   category: z.string().min(1).optional(),
   note: z.string().optional(),
+  baseCurrency: currencyCode.optional(),
+  currency: currencyCode.nullable().optional(),
+  originalAmount: z.number().positive().nullable().optional(),
+  rate: z.number().positive().nullable().optional(),
 })
 
 export const expenseController = {

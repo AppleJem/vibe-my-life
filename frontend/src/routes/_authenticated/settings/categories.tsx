@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { useCategories } from '../../../contexts/CategoriesContext'
+import { useCategories } from '../../../contexts/MetadataContext'
 import {
   formatCategory,
   validateCategoryName,
