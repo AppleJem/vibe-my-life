@@ -8,6 +8,8 @@ const envSchema = z.object({
 
   // DynamoDB
   DYNAMO_TABLE_NAME: z.string().default('vibe-my-life-expense'),
+  // Habits live in their own table — a separate life app, not an expense entity type.
+  HABIT_TABLE_NAME: z.string().default('vibe-my-life-habit'),
 
   // Auth
   JWT_SECRET: z.string().min(1),

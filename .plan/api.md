@@ -445,6 +445,147 @@ part of the key so a same-day, same-amount income and expense don't cancel each 
 
 ---
 
+## Habit Endpoints
+
+A separate life app from expenses, backed by its own table (`vibe-my-life-habit`). All
+routes require auth.
+
+A habit's `type` decides what a completion carries — `boolean` takes no value, `count`
+requires `count`, `duration` requires `durationMinutes`. That is validated against the
+**stored** definition, not the request body, so sending the wrong one is a 400.
+
+### GET /api/habits
+
+**Response** (200): `{ "habits": [...] }`
+
+```json
+{
+  "habits": [
+    {
+      "id": "8c1d8d20-...",
+      "name": "Read",
+      "emoji": "📚",
+      "description": "Twenty pages before bed",
+      "type": "count",
+      "unit": "pages",
+      "target": 10,
+      "tags": ["morning"],
+      "color": "pink",
+      "lastCompletedDate": "2026-08-04",
+      "createdAt": "2026-08-01T09:00:00.000Z"
+    }
+  ]
+}
+```
+
+`lastCompletedDate` is what the list page's done-today dot reads — comparing it against the
+client's own local today. It is absent until the habit has been logged once.
+
+---
+
+### POST /api/habits
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| name | string | Yes | |
+| emoji | string | Yes | |
+| type | string | Yes | `boolean` \| `count` \| `duration` |
+| description | string | No | Defaults to `""` |
+| unit | string | No | Ignored unless `type` is `count` |
+| target | number | No | Positive; optional daily goal |
+| tags | string[] | No | Defaults to `[]` |
+| color | string | No | Defaults to `pink` |
+
+**Response** (201): `{ "habit": { ... } }`
+
+---
+
+### GET /api/habits/:id
+
+**Response** (200): `{ "habit": { ... } }`, or 404.
+
+---
+
+### PUT /api/habits/:id
+
+Partial of the create body, plus `archived: boolean`. `unit` and `target` accept `null` to
+clear them.
+
+Changing `type` to anything but `count` clears `unit` server-side — the client does not
+have to remember to send the null.
+
+**Response** (200): `{ "habit": { ... } }`, or 404.
+
+---
+
+### DELETE /api/habits/:id
+
+Cascades: the habit's entire completion history goes with it.
+
+**Response**: `204 No Content`
+
+---
+
+### GET /api/habits/:id/completions
+
+The whole history, oldest first. Not paginated and not date-bounded — see
+`.plan/database.md` for why.
+
+**Response** (200):
+```json
+{
+  "completions": [
+    {
+      "habitId": "8c1d8d20-...",
+      "timestamp": "2026-08-04T14:36:51.379Z",
+      "date": "2026-08-04",
+      "notes": "Finished chapter 3",
+      "count": 12,
+      "unit": "pages"
+    }
+  ]
+}
+```
+
+---
+
+### POST /api/habits/:id/completions
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| date | string | Yes | `YYYY-MM-DD`, the **client's local day** |
+| notes | string | No | Defaults to `""` |
+| count | number | Yes for `count` habits | Positive; rejected on other types |
+| durationMinutes | number | Yes for `duration` habits | Positive; rejected on other types |
+
+`date` is required and comes from `localToday()` on the client. The server is UTC and must
+not be the one deciding when a day rolls over.
+
+**Response** (201):
+```json
+{
+  "completion": { "...": "..." },
+  "habit": { "...": "..." }
+}
+```
+
+The updated habit rides along so the list cache can be refreshed without a second round
+trip — `lastCompletedDate` has just moved.
+
+**Errors**: `409 { "error": "Already logged for this day" }` when that habit already has a
+completion on `date`. One per day is a server-side rule, not just a UI state.
+
+---
+
+### DELETE /api/habits/:id/completions/:timestamp
+
+`timestamp` is an ISO string, so it must be `encodeURIComponent`'d into the path.
+
+**Response** (200): `{ "habit": { ... } }` — the habit with `lastCompletedDate`
+recomputed from whatever completions survive, which may move it backwards or remove it.
+
+---
+
 ## Error Format
 
 All errors follow this structure:
@@ -464,4 +605,5 @@ All errors follow this structure:
 | 400 | Bad Request (validation error) |
 | 401 | Unauthorized (missing/invalid token) |
 | 404 | Not Found |
+| 409 | Conflict (habit already logged for that day) |
 | 500 | Internal Server Error |

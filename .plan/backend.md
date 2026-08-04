@@ -8,8 +8,9 @@ AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 
-# DynamoDB
+# DynamoDB — one table per life app, both created by hand in the console
 DYNAMO_TABLE_NAME=vibe-my-life-expense
+HABIT_TABLE_NAME=vibe-my-life-habit
 
 # Auth
 JWT_SECRET=your-secret-key

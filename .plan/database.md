@@ -1,6 +1,19 @@
 # Database Design
 
-## DynamoDB Single Table
+There are two tables, one per life app. They share nothing but the `USER#<userId>`
+partition-key convention and the doc client (which is region-scoped, not table-scoped).
+
+| App | Table | Env var |
+|-----|-------|---------|
+| Expenses | `vibe-my-life-expense` | `DYNAMO_TABLE_NAME` |
+| Habits | `vibe-my-life-habit` | `HABIT_TABLE_NAME` |
+
+Neither is created by code — there is no IaC in this repo. Both were made by hand in the
+AWS console with the same settings, and **this file is the only record of them**:
+partition key `PK` (String), sort key `SK` (String), on-demand capacity, no secondary
+indexes, no TTL.
+
+## Expenses — `vibe-my-life-expense`
 
 **Table Name**: `vibe-my-life-expense`
 
@@ -161,3 +174,89 @@ If we add more entity types later (notes, calendar events), we can extend:
 - `SK = "EVENT#<date>#<id>"`
 
 Same PK (`USER#<userId>`) keeps everything user-scoped.
+
+---
+
+# Habits — `vibe-my-life-habit`
+
+A second life app, deliberately in its own table. Habits share no entity with expenses, so
+co-locating them would only mean every expense prefix scan had to step over habit rows.
+
+Two item shapes, both under `PK = USER#<userId>`, discriminated by the sort key.
+
+### Habit definition — `SK = META#<habitId>`
+
+| Attribute | Type | Example | Notes |
+|-----------|------|---------|-------|
+| `id` | `S` | `8c1d8d20-…` | uuid |
+| `name` | `S` | `Read` | |
+| `emoji` | `S` | `📚` | List icon, and the glyph inside the big check box |
+| `description` | `S` | `Twenty pages before bed` | Optional, defaults to `""` |
+| `type` | `S` | `count` | `boolean` \| `count` \| `duration` |
+| `unit` | `S` | `pages` | **Only** on `count` habits; the API strips it otherwise |
+| `target` | `N` | `10` | Optional daily goal; drives heatmap intensity |
+| `tags` | `L` | `["morning"]` | Free-form strings |
+| `color` | `S` | `pink` | Key into `ACCENTS` in `frontend/src/constants/habitColors.ts` |
+| `lastCompletedDate` | `S` | `2026-08-04` | Denormalised; absent until the first completion |
+| `createdAt` | `S` | `2026-08-04T12:00:00.000Z` | ISO 8601 |
+| `archived` | `BOOL` | `true` | Optional; hides the habit but keeps its history |
+
+### Completion — `SK = HABIT#<habitId>#COMPLETION#<timestamp>`
+
+| Attribute | Type | Example | Notes |
+|-----------|------|---------|-------|
+| `habitId` | `S` | `8c1d8d20-…` | |
+| `timestamp` | `S` | `2026-08-04T14:36:51.379Z` | ISO 8601, server-generated. Also the SK suffix |
+| `date` | `S` | `2026-08-04` | **Client's local day.** See below |
+| `notes` | `S` | `Finished chapter 3` | Optional, defaults to `""` |
+| `count` | `N` | `12` | Only on `count` habits |
+| `unit` | `S` | `pages` | Snapshot of the habit's unit at log time |
+| `durationMinutes` | `N` | `20` | Only on `duration` habits |
+
+## The three rules worth remembering
+
+**`date` is supplied by the client and is never derived from `timestamp`.** The server runs
+UTC, so deriving it would file a 10pm SGT log under tomorrow. It is also the only field the
+heatmap and the streak maths group by — `timestamp` exists to identify the row for deletes,
+not to date it. This is the same rule the recurring module follows by taking `today` from
+the client.
+
+**`lastCompletedDate` is denormalised onto the definition so the list page costs one
+query.** The list needs "done today?" for every habit; without the watermark that is a
+query per habit. It moves forward on log, and is **recomputed from the surviving rows** on
+delete — which is why undo lives on the detail page, where that history is already loaded.
+Backfilling an older day does not drag it backwards.
+
+**One completion per habit per day, enforced server-side (409).** The big check box goes
+inert once the day is logged, and a stale client must not be able to double-log by racing
+that. The check is a scan of the habit's completions rather than a `lastCompletedDate`
+comparison, so it also catches a backfill of an already-logged older day.
+
+`unit` is stored twice on purpose. The habit's copy is current; the completion's is a
+snapshot, so renaming "pages" to "chapters" doesn't retroactively rewrite what history
+says you did. Changing a habit's `type` away from `count` **clears** the definition's
+`unit` (a `REMOVE`), which the controller does regardless of what the client sent.
+
+## Access patterns
+
+### List habits
+```
+PK = "USER#<userId>"  AND  begins_with(SK, "META#")
+```
+
+### One habit's whole history
+```
+PK = "USER#<userId>"  AND  begins_with(SK, "HABIT#<habitId>#COMPLETION#")
+```
+
+Returned oldest-first — the timestamp in the sort key does the ordering.
+
+History is read whole rather than range-sliced. A `since` bound would be a UTC timestamp
+compared against locally-dated rows, which is off-by-one-day-prone for no benefit at
+single-user volume (a few thousand rows over years). Both queries page on
+`LastEvaluatedKey`.
+
+### Delete a habit
+Cascades: query the completions, `BatchWriteCommand` the deletes 25 at a time, then delete
+the definition **last**. A failure mid-way leaves orphaned completions rather than a habit
+whose history has silently vanished, and re-running the same delete finishes the job.
