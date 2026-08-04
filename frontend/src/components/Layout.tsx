@@ -17,7 +17,7 @@ export function Layout({ children }: LayoutProps) {
     <div className="min-h-screen bg-zinc-950">
       <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-sm border-b border-zinc-800">
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-rose-400 to-violet-400 bg-clip-text text-transparent">
+          <h1 className="text-xl font-bold text-pink-500">
             Vibe My Life
           </h1>
           <button

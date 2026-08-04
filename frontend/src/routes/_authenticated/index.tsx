@@ -63,7 +63,7 @@ function DashboardPage() {
       {/* FAB - Add expense */}
       <button
         onClick={() => setIsModalOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-rose-400 to-violet-400 rounded-full shadow-lg shadow-rose-500/25 flex items-center justify-center hover:shadow-rose-500/40 transition-shadow"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-shadow"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

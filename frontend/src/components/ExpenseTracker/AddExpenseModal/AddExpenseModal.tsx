@@ -139,7 +139,7 @@ export function AddExpenseModal({ isOpen, onClose, onSubmit }: AddExpenseModalPr
           <button
             onClick={goNext}
             disabled={!canProceed() || isSubmitting}
-            className="w-full py-3 bg-gradient-to-r from-rose-400 to-violet-400 text-white font-semibold rounded-xl shadow-lg shadow-rose-500/25 hover:shadow-rose-500/40 transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3 bg-pink-500 text-white font-semibold rounded-xl shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting
               ? 'Saving...'
