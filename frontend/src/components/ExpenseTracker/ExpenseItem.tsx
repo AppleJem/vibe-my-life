@@ -1,8 +1,11 @@
 import { useState, useRef } from 'react'
-import { useSpring, animated } from '@react-spring/web'
+import { useSpring, animated, type AnimatedProps } from '@react-spring/web'
 import { useDrag } from '@use-gesture/react'
 import { getCategoryByKey } from '../../constants/categories'
 import type { Expense } from '../../types/expense'
+import type { HTMLAttributes } from 'react'
+
+const AnimatedDiv = animated.div as React.ComponentType<AnimatedProps<HTMLAttributes<HTMLDivElement>>>
 
 interface ExpenseItemProps {
   expense: Expense
@@ -53,9 +56,9 @@ export function ExpenseItem({ expense, onDelete }: ExpenseItemProps) {
         </div>
 
         {/* Swipeable content */}
-        <animated.div
+        <AnimatedDiv
           {...bind()}
-          style={{ x, touchAction: 'pan-y' }}
+          style={{ x, touchAction: 'pan-y' } as any}
           className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4 cursor-grab active:cursor-grabbing"
         >
           <div className="text-3xl">{category?.emoji ?? '📦'}</div>
@@ -77,7 +80,7 @@ export function ExpenseItem({ expense, onDelete }: ExpenseItemProps) {
               ${expense.amount.toFixed(2)}
             </p>
           </div>
-        </animated.div>
+        </AnimatedDiv>
       </div>
 
       {/* Confirm dialog */}

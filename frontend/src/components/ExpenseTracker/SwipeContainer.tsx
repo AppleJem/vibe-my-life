@@ -1,5 +1,8 @@
-import { useSpring, animated } from '@react-spring/web'
+import { useSpring, animated, type AnimatedProps } from '@react-spring/web'
 import { useDrag } from '@use-gesture/react'
+import type { HTMLAttributes } from 'react'
+
+const AnimatedDiv = animated.div as React.ComponentType<AnimatedProps<HTMLAttributes<HTMLDivElement>>>
 
 interface SwipeContainerProps {
   children: React.ReactNode
@@ -11,7 +14,7 @@ export function SwipeContainer({ children, onSwipeLeft, onSwipeRight }: SwipeCon
   const [{ x }, api] = useSpring(() => ({ x: 0 }))
 
   const bind = useDrag(
-    ({ down, movement: [mx], velocity: [vx], direction: [dx], cancel }) => {
+    ({ down, movement: [mx], velocity: [vx], direction: [dx] }) => {
       if (!down) {
         // Trigger swipe if velocity or distance exceeds threshold
         if (Math.abs(mx) > 100 || (Math.abs(vx) > 0.5 && Math.abs(mx) > 30)) {
@@ -33,12 +36,12 @@ export function SwipeContainer({ children, onSwipeLeft, onSwipeRight }: SwipeCon
   )
 
   return (
-    <animated.div
+    <AnimatedDiv
       {...bind()}
-      style={{ x, touchAction: 'pan-y' }}
+      style={{ x, touchAction: 'pan-y' } as any}
       className="cursor-grab active:cursor-grabbing"
     >
       {children}
-    </animated.div>
+    </AnimatedDiv>
   )
 }
