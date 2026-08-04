@@ -28,7 +28,8 @@ export function Layout({ children }: LayoutProps) {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-6">
+      {/* Extra bottom padding clears the dashboard's fixed tab bar and FAB. */}
+      <main className="max-w-lg mx-auto px-4 pt-6 pb-28">
         {children}
       </main>
     </div>

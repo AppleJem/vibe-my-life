@@ -4,6 +4,8 @@ import { MonthHeader } from '../../components/ExpenseTracker/MonthHeader'
 import { ExpenseList } from '../../components/ExpenseTracker/ExpenseList'
 import { SwipeContainer } from '../../components/ExpenseTracker/SwipeContainer'
 import { AddExpenseModal } from '../../components/ExpenseTracker/AddExpenseModal/AddExpenseModal'
+import { CategoryBreakdown } from '../../components/ExpenseTracker/CategoryBreakdown/CategoryBreakdown'
+import { ViewTabs, type DashboardView } from '../../components/ExpenseTracker/ViewTabs'
 import { useExpenses } from '../../hooks/useExpenses'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../types/expense'
 
@@ -18,6 +20,7 @@ function DashboardPage() {
   })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
+  const [view, setView] = useState<DashboardView>('list')
 
   const { expenses, loading, deleteExpense, addExpense, updateExpense } = useExpenses(yearMonth)
 
@@ -67,12 +70,21 @@ function DashboardPage() {
           onNext={goToNextMonth}
         />
 
-        <ExpenseList
-          expenses={expenses}
-          loading={loading}
-          onDelete={deleteExpense}
-          onExpenseClick={handleExpenseClick}
-        />
+        {view === 'list' ? (
+          <ExpenseList
+            expenses={expenses}
+            loading={loading}
+            onDelete={deleteExpense}
+            onExpenseClick={handleExpenseClick}
+          />
+        ) : (
+          <CategoryBreakdown
+            expenses={expenses}
+            loading={loading}
+            onDelete={deleteExpense}
+            onExpenseClick={handleExpenseClick}
+          />
+        )}
       </SwipeContainer>
 
       {/* FAB - Add expense */}
@@ -81,7 +93,7 @@ function DashboardPage() {
           setSelectedExpense(null)
           setIsModalOpen(true)
         }}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-shadow"
+        className="fixed bottom-24 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-shadow"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -96,6 +108,8 @@ function DashboardPage() {
         expense={selectedExpense}
         onUpdate={handleUpdateExpense}
       />
+
+      <ViewTabs value={view} onChange={setView} />
     </>
   )
 }

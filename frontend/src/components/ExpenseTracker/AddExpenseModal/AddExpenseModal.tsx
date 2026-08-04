@@ -223,8 +223,8 @@ export function AddExpenseModal({
 
       {/* Input for the active field, pinned to the bottom */}
       <div className="border-t border-zinc-800 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        {/* Currency selector sits above the inputs and applies to the whole entry */}
-        {currencies.length > 1 && (
+        {/* Currency selector only shown when editing the amount */}
+        {activeField === 'amount' && currencies.length > 1 && (
           <div className="mb-3">
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {currencies.map((code) => {
