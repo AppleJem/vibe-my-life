@@ -9,7 +9,7 @@ import { createGeminiProvider } from './providers/gemini.provider.js'
 
 class LLMClient {
   private providers: Map<LLMProviderName, LLMProvider> = new Map()
-  private defaultProvider: LLMProviderName = 'gemini'
+  private defaultProvider: LLMProviderName = 'mimo'
 
   constructor() {
     // Initialize providers based on available API keys
@@ -24,11 +24,11 @@ class LLMClient {
       this.providers.set('gemini', createGeminiProvider(geminiKey))
     }
 
-    // Set default to whichever is available, preferring gemini
-    if (this.providers.has('gemini')) {
-      this.defaultProvider = 'gemini'
-    } else if (this.providers.has('mimo')) {
+    // Set default to whichever is available, preferring mimo
+    if (this.providers.has('mimo')) {
       this.defaultProvider = 'mimo'
+    } else if (this.providers.has('gemini')) {
+      this.defaultProvider = 'gemini'
     }
   }
 
