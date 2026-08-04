@@ -12,13 +12,22 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 const MOVE_TOLERANCE = 12
 
+/**
+ * Cubic ease-in-out: fast at the head and tail, slow in the middle.
+ * Gives that satisfying "whip" snap when the ring completes.
+ * https://easings.net/#easeInOutCubic
+ */
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+}
+
 interface Options {
   onComplete: () => void
   durationMs?: number
   disabled?: boolean
 }
 
-export function useLongPress({ onComplete, durationMs = 700, disabled = false }: Options) {
+export function useLongPress({ onComplete, durationMs = 5000, disabled = false }: Options) {
   const [progress, setProgress] = useState(0)
   const [isHolding, setIsHolding] = useState(false)
 
@@ -62,7 +71,7 @@ export function useLongPress({ onComplete, durationMs = 700, disabled = false }:
           return
         }
 
-        setProgress(elapsed)
+        setProgress(easeInOutCubic(elapsed))
         frameRef.current = requestAnimationFrame(tick)
       }
 
