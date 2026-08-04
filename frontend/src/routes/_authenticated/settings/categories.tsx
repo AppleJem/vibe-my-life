@@ -25,7 +25,15 @@ interface DraftCategory extends DraftNode {
   subcategories: DraftNode[]
 }
 
-const newId = () => crypto.randomUUID()
+/**
+ * Draft-row keys only. `crypto.randomUUID` is unavailable in non-secure
+ * contexts (e.g. the dev server over a LAN IP), so fall back to a counter.
+ */
+let idCounter = 0
+const newId = () =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `draft-${Date.now().toString(36)}-${idCounter++}`
 
 function toDraft(categories: Category[]): DraftCategory[] {
   return categories.map((cat) => ({

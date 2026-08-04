@@ -4,6 +4,8 @@ export interface Expense {
   amount: number        // always in baseCurrency
   category: string
   note: string
+  /** Free-form long-form comment. Absent on rows saved before the field existed. */
+  remarks?: string
   createdAt: string     // ISO string
 
   // Multi-currency. `baseCurrency` is a snapshot of the user's base at save time —
@@ -21,6 +23,7 @@ export interface CreateExpenseInput {
   amount: number
   category: string
   note?: string
+  remarks?: string
   baseCurrency?: string
   currency?: string
   originalAmount?: number
@@ -32,6 +35,7 @@ export interface UpdateExpenseInput {
   amount?: number
   category?: string
   note?: string
+  remarks?: string
   baseCurrency?: string
   // null clears the field — used when a foreign expense is edited back to the base currency
   currency?: string | null

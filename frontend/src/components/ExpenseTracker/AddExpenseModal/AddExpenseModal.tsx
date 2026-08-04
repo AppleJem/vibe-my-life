@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { DatePicker } from './DatePicker'
 import { Calculator } from './Calculator'
 import { CategoryPicker } from './CategoryPicker'
-import { NoteInput } from './NoteInput'
+import { TextAreaInput } from './TextAreaInput'
 import { displayCategory } from '../../../constants/categories'
 import { useCurrency } from '../../../contexts/MetadataContext'
 import { formatAmount, formatRate, toBase } from '../../../utils/currency'
@@ -16,14 +16,22 @@ interface AddExpenseModalProps {
   onUpdate?: (id: string, date: string, updates: UpdateExpenseInput) => Promise<void>
 }
 
-type Field = 'date' | 'amount' | 'category' | 'note'
+type Field = 'date' | 'amount' | 'category' | 'note' | 'remarks'
 
 const FIELDS: { key: Field; label: string }[] = [
   { key: 'date', label: 'Date' },
   { key: 'amount', label: 'Amount' },
   { key: 'category', label: 'Category' },
   { key: 'note', label: 'Note' },
+  { key: 'remarks', label: 'Remarks' },
 ]
+
+/**
+ * Fields that may be left blank. Confirm has to stay enabled on these — before
+ * remarks existed, note was last and fell through to the save path, so nothing
+ * ever had to skip past an empty optional field.
+ */
+const OPTIONAL_FIELDS: Field[] = ['note', 'remarks']
 
 export function AddExpenseModal({
   isOpen,
@@ -46,6 +54,7 @@ export function AddExpenseModal({
   const [currency, setCurrency] = useState(baseCurrency)
   const [category, setCategory] = useState('')
   const [note, setNote] = useState('')
+  const [remarks, setRemarks] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Load the expense being edited (or a blank form) each time the modal opens
@@ -56,6 +65,7 @@ export function AddExpenseModal({
     setCurrency(expense?.currency ?? expense?.baseCurrency ?? inputCurrency)
     setCategory(expense?.category ?? '')
     setNote(expense?.note ?? '')
+    setRemarks(expense?.remarks ?? '')
     setActiveField('date')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, expense])
@@ -105,6 +115,8 @@ export function AddExpenseModal({
         return category ? displayCategory(category) : '—'
       case 'note':
         return note.trim() || '—'
+      case 'remarks':
+        return remarks.trim() || '—'
     }
   }
 
@@ -118,11 +130,14 @@ export function AddExpenseModal({
         return !!category
       case 'note':
         return !!note.trim()
+      case 'remarks':
+        return !!remarks.trim()
     }
   }
 
   const activeIndex = FIELDS.findIndex((f) => f.key === activeField)
   const isLastField = activeIndex === FIELDS.length - 1
+  const canAdvance = isFilled(activeField) || OPTIONAL_FIELDS.includes(activeField)
 
   const confirmField = () => {
     if (isLastField) {
@@ -142,6 +157,7 @@ export function AddExpenseModal({
           amount: baseAmount,
           category,
           note,
+          remarks,
           baseCurrency,
           // Explicit nulls clear the stored foreign fields when an expense is
           // edited back to the base currency.
@@ -155,6 +171,7 @@ export function AddExpenseModal({
           amount: baseAmount,
           category,
           note,
+          remarks,
           baseCurrency,
           ...(isForeign && { currency, originalAmount: amount, rate: rate! }),
         })
@@ -268,11 +285,27 @@ export function AddExpenseModal({
         {activeField === 'category' && (
           <CategoryPicker value={category} onChange={setCategory} />
         )}
-        {activeField === 'note' && <NoteInput value={note} onChange={setNote} />}
+        {activeField === 'note' && (
+          <TextAreaInput
+            value={note}
+            onChange={setNote}
+            label="Note (optional)"
+            placeholder="What was this expense for?"
+          />
+        )}
+        {activeField === 'remarks' && (
+          <TextAreaInput
+            value={remarks}
+            onChange={setRemarks}
+            label="Remarks (optional)"
+            placeholder="Longer comments, context, or a description…"
+            rows={5}
+          />
+        )}
 
         <button
           onClick={confirmField}
-          disabled={(isLastField ? !canSave : !isFilled(activeField)) || isSubmitting}
+          disabled={(isLastField ? !canSave : !canAdvance) || isSubmitting}
           className="mt-3 w-full py-2.5 bg-pink-500 text-white text-sm font-semibold rounded-lg shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting

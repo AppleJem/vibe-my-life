@@ -19,6 +19,7 @@ export const expenseModel = {
       amount: input.amount,
       category: input.category,
       note: input.note ?? '',
+      remarks: input.remarks ?? '',
       createdAt: now,
       // Only spread the currency fields that were actually provided — DynamoDB
       // rejects explicit `undefined` attribute values.
@@ -61,6 +62,7 @@ export const expenseModel = {
       amount: input.amount,
       category: input.category,
       note: input.note ?? '',
+      remarks: input.remarks ?? '',
       createdAt: input.createdAt ?? now,
       // Same conditional spreads as `create` — DynamoDB rejects explicit `undefined`,
       // and an absent `currency` is what marks a row as base-currency.
@@ -184,7 +186,7 @@ export const expenseModel = {
 
   async update(userId: string, date: string, expenseId: string, updates: UpdateExpenseInput): Promise<Expense> {
     const UPDATABLE = [
-      'date', 'amount', 'category', 'note',
+      'date', 'amount', 'category', 'note', 'remarks',
       'baseCurrency', 'currency', 'originalAmount', 'rate',
     ] as const
 
