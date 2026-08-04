@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DatePicker } from './DatePicker'
 import { Calculator } from './Calculator'
 import { CategoryPicker } from './CategoryPicker'
 import { NoteInput } from './NoteInput'
+import { getCategoryByKey } from '../../../constants/categories'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../../types/expense'
 
 interface AddExpenseModalProps {
@@ -13,44 +14,70 @@ interface AddExpenseModalProps {
   onUpdate?: (id: string, date: string, updates: UpdateExpenseInput) => Promise<void>
 }
 
-type Step = 'date' | 'amount' | 'category' | 'note'
+type Field = 'date' | 'amount' | 'category' | 'note'
 
-const STEPS: { key: Step; label: string }[] = [
+const FIELDS: { key: Field; label: string }[] = [
   { key: 'date', label: 'Date' },
   { key: 'amount', label: 'Amount' },
   { key: 'category', label: 'Category' },
   { key: 'note', label: 'Note' },
 ]
 
-const CATEGORY_LABELS: Record<string, string> = {
-  food: '🍔 Food',
-  transport: '🚌 Transport',
-  shopping: '🛍️ Shopping',
-  entertainment: '🎬 Entertainment',
-  bills: '📄 Bills',
-  health: '💊 Health',
-  other: '📦 Other',
-}
-
-export function AddExpenseModal({ isOpen, onClose, onSubmit, expense, onUpdate }: AddExpenseModalProps) {
+export function AddExpenseModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  expense,
+  onUpdate,
+}: AddExpenseModalProps) {
   const today = new Date()
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
   const isEditMode = !!expense
-  const [isEditing, setIsEditing] = useState(false)
-  const [step, setStep] = useState<Step>('date')
+
+  const [activeField, setActiveField] = useState<Field>('date')
   const [date, setDate] = useState(todayStr)
   const [amount, setAmount] = useState(0)
   const [category, setCategory] = useState('')
   const [note, setNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const currentStepIndex = STEPS.findIndex((s) => s.key === step)
-  const isFirstStep = currentStepIndex === 0
-  const isLastStep = currentStepIndex === STEPS.length - 1
+  // Load the expense being edited (or a blank form) each time the modal opens
+  useEffect(() => {
+    if (!isOpen) return
+    setDate(expense?.date ?? todayStr)
+    setAmount(expense?.amount ?? 0)
+    setCategory(expense?.category ?? '')
+    setNote(expense?.note ?? '')
+    setActiveField('date')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, expense])
 
-  const canProceed = () => {
-    switch (step) {
+  const canSave = !!date && amount > 0 && !!category
+
+  const fieldSummary = (key: Field) => {
+    switch (key) {
+      case 'date': {
+        if (date === todayStr) return 'Today'
+        const [y, m, d] = date.split('-').map(Number)
+        return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        })
+      }
+      case 'amount':
+        return amount > 0 ? `¥${amount.toFixed(2)}` : '—'
+      case 'category': {
+        const cat = getCategoryByKey(category)
+        return cat ? `${cat.emoji} ${cat.label}` : '—'
+      }
+      case 'note':
+        return note.trim() || '—'
+    }
+  }
+
+  const isFilled = (key: Field) => {
+    switch (key) {
       case 'date':
         return !!date
       case 'amount':
@@ -58,28 +85,23 @@ export function AddExpenseModal({ isOpen, onClose, onSubmit, expense, onUpdate }
       case 'category':
         return !!category
       case 'note':
-        return true // note is optional
-      default:
-        return false
+        return !!note.trim()
     }
   }
 
-  const goNext = () => {
-    if (!canProceed()) return
-    if (isLastStep) {
+  const activeIndex = FIELDS.findIndex((f) => f.key === activeField)
+  const isLastField = activeIndex === FIELDS.length - 1
+
+  const confirmField = () => {
+    if (isLastField) {
       handleSubmit()
       return
     }
-    setStep(STEPS[currentStepIndex + 1].key)
-  }
-
-  const goBack = () => {
-    if (!isFirstStep) {
-      setStep(STEPS[currentStepIndex - 1].key)
-    }
+    setActiveField(FIELDS[activeIndex + 1].key)
   }
 
   const handleSubmit = async () => {
+    if (!canSave) return
     setIsSubmitting(true)
     try {
       if (isEditMode && expense && onUpdate) {
@@ -87,7 +109,6 @@ export function AddExpenseModal({ isOpen, onClose, onSubmit, expense, onUpdate }
       } else {
         await onSubmit({ date, amount, category, note })
       }
-      resetForm()
       onClose()
     } catch (err) {
       console.error('Failed to save expense:', err)
@@ -96,152 +117,80 @@ export function AddExpenseModal({ isOpen, onClose, onSubmit, expense, onUpdate }
     }
   }
 
-  const resetForm = () => {
-    setDate(todayStr)
-    setAmount(0)
-    setCategory('')
-    setNote('')
-    setStep('date')
-    setIsEditing(false)
-  }
-
-  const handleClose = () => {
-    resetForm()
-    onClose()
-  }
-
-  const handleFieldClick = (field: Step) => {
-    if (!isEditing) {
-      setIsEditing(true)
-    }
-    setStep(field)
-  }
-
-  // Initialize form with expense data when opening in edit mode
-  const initFromExpense = () => {
-    if (expense) {
-      setDate(expense.date)
-      setAmount(expense.amount)
-      setCategory(expense.category)
-      setNote(expense.note || '')
-      setStep('date')
-      setIsEditing(false)
-    }
-  }
-
-  // Call initFromExpense when modal opens with an expense
-  if (isOpen && isEditMode && !isEditing && date !== expense?.date && amount !== expense?.amount) {
-    initFromExpense()
-  }
-
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-zinc-900 rounded-t-3xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-          <button
-            onClick={isFirstStep ? handleClose : goBack}
-            className="text-zinc-400 hover:text-zinc-100"
-          >
-            {isFirstStep ? 'Cancel' : 'Back'}
-          </button>
-          <div className="flex gap-2">
-            {isEditMode && !isEditing ? (
-              <span className="text-sm font-medium text-zinc-300">
-                {expense?.category ? CATEGORY_LABELS[expense.category] || expense.category : 'Expense'}
-              </span>
-            ) : (
-              STEPS.map((s, i) => (
-                <div
-                  key={s.key}
-                  className={`h-1.5 w-8 rounded-full transition-colors ${
-                    i <= currentStepIndex ? 'bg-pink-500' : 'bg-zinc-700'
-                  }`}
-                />
-              ))
-            )}
-          </div>
-          <button
-            onClick={handleClose}
-            className="text-zinc-400 hover:text-zinc-100"
-          >
-            ✕
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-900">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+        <button onClick={onClose} className="text-sm text-zinc-400 hover:text-zinc-100">
+          Cancel
+        </button>
+        <span className="text-base font-semibold text-zinc-100">
+          {isEditMode ? 'Edit Expense' : 'New Expense'}
+        </span>
+        <button
+          onClick={handleSubmit}
+          disabled={!canSave || isSubmitting}
+          className="text-sm font-semibold text-pink-500 hover:text-pink-400 disabled:text-zinc-600 disabled:cursor-not-allowed"
+        >
+          {isSubmitting ? 'Saving…' : 'Save'}
+        </button>
+      </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {isEditMode && !isEditing ? (
-            /* View Mode - Summary cards */
-            <div className="space-y-3">
-              <button
-                onClick={() => handleFieldClick('date')}
-                className="w-full flex items-center justify-between p-4 bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-colors"
-              >
-                <span className="text-zinc-400 text-sm">Date</span>
-                <span className="text-zinc-100 font-medium">{expense?.date}</span>
-              </button>
-              <button
-                onClick={() => handleFieldClick('amount')}
-                className="w-full flex items-center justify-between p-4 bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-colors"
-              >
-                <span className="text-zinc-400 text-sm">Amount</span>
-                <span className="text-2xl font-bold text-pink-500">¥{expense?.amount.toFixed(2)}</span>
-              </button>
-              <button
-                onClick={() => handleFieldClick('category')}
-                className="w-full flex items-center justify-between p-4 bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-colors"
-              >
-                <span className="text-zinc-400 text-sm">Category</span>
-                <span className="text-zinc-100 font-medium">
-                  {expense?.category ? CATEGORY_LABELS[expense.category] || expense.category : '—'}
-                </span>
-              </button>
-              <button
-                onClick={() => handleFieldClick('note')}
-                className="w-full flex items-center justify-between p-4 bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-colors"
-              >
-                <span className="text-zinc-400 text-sm">Note</span>
-                <span className="text-zinc-100 font-medium truncate max-w-[60%] text-right">
-                  {expense?.note || '—'}
-                </span>
-              </button>
-            </div>
-          ) : (
-            /* Edit Mode - Input fields */
-            <>
-              <h2 className="text-lg font-semibold text-zinc-100 mb-4">
-                {STEPS[currentStepIndex].label}
-              </h2>
-
-              {step === 'date' && <DatePicker value={date} onChange={setDate} />}
-              {step === 'amount' && <Calculator value={amount} onChange={setAmount} />}
-              {step === 'category' && <CategoryPicker value={category} onChange={setCategory} />}
-              {step === 'note' && <NoteInput value={note} onChange={setNote} />}
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        {(!isEditMode || isEditing) && (
-          <div className="p-4 border-t border-zinc-800">
+      {/* Fields — one full-width row each, click to edit */}
+      <div className="flex-1 overflow-y-auto">
+        {FIELDS.map((f) => {
+          const isActive = f.key === activeField
+          return (
             <button
-              onClick={goNext}
-              disabled={!canProceed() || isSubmitting}
-              className="w-full py-3 bg-pink-500 text-white font-semibold rounded-xl shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
+              key={f.key}
+              onClick={() => setActiveField(f.key)}
+              className={`flex w-full items-center justify-between gap-4 px-4 py-4 border-b border-zinc-800 text-left transition-colors ${
+                isActive ? 'bg-zinc-800' : 'hover:bg-zinc-800/50'
+              }`}
             >
-              {isSubmitting
-                ? 'Saving...'
-                : isLastStep
-                ? isEditMode
-                  ? 'Update Expense'
-                  : 'Save Expense'
-                : 'Next'}
+              <span
+                className={`text-sm font-medium ${
+                  isActive ? 'text-pink-500' : 'text-zinc-400'
+                }`}
+              >
+                {f.label}
+              </span>
+              <span
+                className={`truncate text-base ${
+                  isFilled(f.key) ? 'text-zinc-100' : 'text-zinc-600'
+                }`}
+              >
+                {fieldSummary(f.key)}
+              </span>
             </button>
-          </div>
+          )
+        })}
+      </div>
+
+      {/* Input for the active field, pinned to the bottom */}
+      <div className="border-t border-zinc-800 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {activeField === 'date' && <DatePicker value={date} onChange={setDate} />}
+        {activeField === 'amount' && <Calculator value={amount} onChange={setAmount} />}
+        {activeField === 'category' && (
+          <CategoryPicker value={category} onChange={setCategory} />
         )}
+        {activeField === 'note' && <NoteInput value={note} onChange={setNote} />}
+
+        <button
+          onClick={confirmField}
+          disabled={(isLastField ? !canSave : !isFilled(activeField)) || isSubmitting}
+          className="mt-3 w-full py-2.5 bg-pink-500 text-white text-sm font-semibold rounded-lg shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSubmitting
+            ? 'Saving...'
+            : isLastField
+            ? isEditMode
+              ? 'Update Expense'
+              : 'Save Expense'
+            : 'Confirm'}
+        </button>
       </div>
     </div>
   )

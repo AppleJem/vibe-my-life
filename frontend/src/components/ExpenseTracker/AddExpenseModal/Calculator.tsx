@@ -7,7 +7,7 @@ interface CalculatorProps {
 
 export function Calculator({ value, onChange }: CalculatorProps) {
   const [expression, setExpression] = useState(value > 0 ? String(value) : '')
-  const [result, setResult] = useState<number | null>(null)
+  const [result, setResult] = useState<number | null>(value > 0 ? value : null)
 
   const evaluateExpression = (expr: string): number | null => {
     try {
@@ -86,7 +86,7 @@ export function Calculator({ value, onChange }: CalculatorProps) {
   ]
 
   const getButtonStyle = (btn: string) => {
-    const base = 'w-full h-14 rounded-xl text-lg font-semibold transition-colors active:scale-95 '
+    const base = 'w-full h-10 rounded-lg text-base font-semibold transition-colors active:scale-95 '
 
     if (btn === 'C' || btn === '⌫') {
       return base + 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
@@ -100,19 +100,19 @@ export function Calculator({ value, onChange }: CalculatorProps) {
   return (
     <div>
       {/* Display */}
-      <div className="bg-zinc-800 rounded-xl p-4 mb-4">
-        <div className="text-right text-zinc-400 text-sm h-6 overflow-hidden">
+      <div className="bg-zinc-800 rounded-lg px-3 py-2 mb-2">
+        <div className="text-right text-zinc-400 text-xs h-4 overflow-hidden">
           {expression || '0'}
         </div>
-        <div className="text-right text-zinc-100 text-2xl font-bold">
-          {result !== null ? `$${result.toFixed(2)}` : '$0.00'}
+        <div className="text-right text-zinc-100 text-xl font-bold leading-tight">
+          {result !== null ? `¥${result.toFixed(2)}` : '¥0.00'}
         </div>
       </div>
 
       {/* Button grid */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {buttons.map((row, rowIndex) => (
-          <div key={rowIndex} className="grid grid-cols-4 gap-2">
+          <div key={rowIndex} className="grid grid-cols-4 gap-1.5">
             {row.map((btn) => (
               <button
                 key={btn}
