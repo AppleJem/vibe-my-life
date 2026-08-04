@@ -19,11 +19,13 @@ app.use(cors({
 
     // Allow localhost on any port in development
     const allowedOrigins = [
-      env.FRONTEND_URL,
+      ...env.FRONTEND_URL,
       'http://localhost:5173',
       'http://localhost:5174',
       'http://localhost:3000',
       'http://192.168.68.102:5173',
+      "https://vibe-my-life-frontend-sigma.vercel.app",
+      "https://jemzhang.com"
     ]
 
     // Allow Railway domains (*.up.railway.app)
@@ -32,7 +34,8 @@ app.use(cors({
     if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:') || isRailwayDomain) {
       callback(null, true)
     } else {
-      callback(new Error('Not allowed by CORS'))
+      // Reject without an error so the browser gets a clean CORS failure, not a 500
+      callback(null, false)
     }
   },
   credentials: true,

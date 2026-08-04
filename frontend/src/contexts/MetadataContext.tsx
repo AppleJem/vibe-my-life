@@ -1,16 +1,23 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { metadataApi, type CategoryRename } from '../services/api'
+import { metadataApi, type SaveCategoriesPayload } from '../services/api'
 import { getRates } from '../services/rates'
-import { DEFAULT_CATEGORIES, type Category } from '../constants/categories'
+import {
+  DEFAULT_CATEGORIES,
+  DEFAULT_INCOME_CATEGORIES,
+  type Category,
+} from '../constants/categories'
 import { DEFAULT_BASE_CURRENCY } from '../constants/currencies'
 
 const INPUT_CURRENCY_KEY = 'vml.inputCurrency'
 
 interface CategoriesValue {
   categories: Category[]
+  /** Income's own list. Independent of `categories`; names may overlap. */
+  incomeCategories: Category[]
   loading: boolean
   error: string | null
-  saveCategories: (categories: Category[], renames: CategoryRename[]) => Promise<void>
+  /** Saves both lists at once — the settings page edits them side by side. */
+  saveCategories: (payload: SaveCategoriesPayload) => Promise<void>
   /** Re-reads settings from the server — used after an import creates categories. */
   refreshMetadata: () => Promise<void>
 }
@@ -45,6 +52,8 @@ function readStoredInputCurrency(): string | null {
 
 export function MetadataProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES)
+  const [incomeCategories, setIncomeCategories] =
+    useState<Category[]>(DEFAULT_INCOME_CATEGORIES)
   const [baseCurrency, setBaseCurrency] = useState(DEFAULT_BASE_CURRENCY)
   const [extraCurrencies, setExtraCurrencies] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,6 +76,7 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
       .then((metadata) => {
         if (cancelled) return
         setCategories(metadata.categories)
+        setIncomeCategories(metadata.incomeCategories)
         setBaseCurrency(metadata.baseCurrency)
         setExtraCurrencies(metadata.currencies)
       })
@@ -125,13 +135,15 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
   const refreshMetadata = useCallback(async () => {
     const metadata = await metadataApi.getMetadata()
     setCategories(metadata.categories)
+    setIncomeCategories(metadata.incomeCategories)
     setBaseCurrency(metadata.baseCurrency)
     setExtraCurrencies(metadata.currencies)
   }, [])
 
-  const saveCategories = useCallback(async (next: Category[], renames: CategoryRename[]) => {
-    const metadata = await metadataApi.saveCategories(next, renames)
+  const saveCategories = useCallback(async (payload: SaveCategoriesPayload) => {
+    const metadata = await metadataApi.saveCategories(payload)
     setCategories(metadata.categories)
+    setIncomeCategories(metadata.incomeCategories)
   }, [])
 
   const saveCurrency = useCallback(async (nextBase: string, nextCurrencies: string[]) => {
@@ -144,6 +156,7 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
     <MetadataContext.Provider
       value={{
         categories,
+        incomeCategories,
         loading,
         error,
         saveCategories,

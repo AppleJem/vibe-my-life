@@ -1,5 +1,10 @@
 import axios from 'axios'
-import type { Expense, CreateExpenseInput, UpdateExpenseInput } from '../types/expense'
+import type {
+  Expense,
+  CreateExpenseInput,
+  UpdateExpenseInput,
+  TransactionType,
+} from '../types/expense'
 import type { Category } from '../constants/categories'
 
 export interface CategoryRename {
@@ -7,8 +12,18 @@ export interface CategoryRename {
   to: string
 }
 
+/** Both lists are saved together so one page can't leave the other stale. */
+export interface SaveCategoriesPayload {
+  categories: Category[]
+  renames: CategoryRename[]
+  incomeCategories: Category[]
+  incomeRenames: CategoryRename[]
+}
+
 export interface ExpenseMetadata {
   categories: Category[]
+  /** Independent of `categories` — names may overlap between the two lists. */
+  incomeCategories: Category[]
   baseCurrency: string
   /** Additional currencies; never includes baseCurrency. */
   currencies: string[]
@@ -77,8 +92,13 @@ export const expenseApi = {
   },
 }
 
-/** Where one (category, subcategory) pair from a backup file should land. */
+/**
+ * Where one (kind, category, subcategory) triple from a backup file should land.
+ * `kind` is part of the identity — the same source name can appear on both income
+ * and expense rows and maps into the respective list.
+ */
 export interface CategoryMapping {
+  kind: TransactionType
   sourceCategory: string
   sourceSubcategory: string | null
   parent: string
@@ -95,8 +115,9 @@ export interface ImportPreview {
   baseCurrency: string
   totals: {
     rows: number
+    /** Expense + income rows that will be written. */
     importable: number
-    skippedIncome: number
+    importableIncome: number
     skippedTransfer: number
     skippedInvalid: number
   }
@@ -111,11 +132,13 @@ export interface ImportPreview {
 
 export interface ImportResult {
   imported: number
-  skippedIncome: number
+  /** Subset of `imported` that landed as income. */
+  importedIncome: number
   skippedTransfer: number
   skippedInvalid: number
   skippedDuplicate: number
   categoriesCreated: string[]
+  incomeCategoriesCreated: string[]
 }
 
 export const importApi = {
@@ -144,13 +167,10 @@ export const metadataApi = {
     return data.metadata
   },
 
-  // Renames are applied retroactively to existing expenses by the backend,
-  // across every month — deletions are deliberately not.
-  async saveCategories(
-    categories: Category[],
-    renames: CategoryRename[] = []
-  ): Promise<ExpenseMetadata> {
-    const { data } = await api.put('/metadata/categories', { categories, renames })
+  // Renames are applied retroactively to existing rows by the backend, across every
+  // month and scoped to their own type — deletions are deliberately not.
+  async saveCategories(payload: SaveCategoriesPayload): Promise<ExpenseMetadata> {
+    const { data } = await api.put('/metadata/categories', payload)
     return data.metadata
   },
 

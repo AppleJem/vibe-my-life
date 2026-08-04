@@ -96,8 +96,9 @@ Create a new expense.
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | date | string | Yes | Format: YYYY-MM-DD |
-| amount | number | Yes | Must be positive. **Always in the base currency** |
-| category | string | Yes | Category key |
+| amount | number | Yes | Must be positive **for both types** — the sign is presentation, derived from `type`. Always in the base currency |
+| type | string | No | `"expense"` (default) or `"income"` |
+| category | string | Yes | Category key, from the list matching `type` |
 | note | string | No | Defaults to "" |
 | baseCurrency | string | No | 3-letter ISO code; snapshot of the base at save time |
 | currency | string | No | 3-letter ISO code. Omit when the expense was entered in the base currency |
@@ -114,6 +115,7 @@ present is the signal that the expense was a foreign-currency spend.
     "id": "a1b2c3d4-...",
     "date": "2026-08-04",
     "amount": 12.25,
+    "type": "expense",
     "category": "food",
     "note": "Ramen in Tokyo",
     "createdAt": "2026-08-04T12:00:00.000Z",
@@ -198,6 +200,7 @@ Returns the full settings shape, seeding defaults on a user's first ever call.
 {
   "metadata": {
     "categories": [{ "name": "🍜 Food", "subcategories": [] }],
+    "incomeCategories": [{ "name": "💰 Salary", "subcategories": [] }],
     "baseCurrency": "SGD",
     "currencies": ["JPY", "USD"],
     "updatedAt": "2026-08-04T12:00:00.000Z"
@@ -215,12 +218,20 @@ Returns the full settings shape, seeding defaults on a user's first ever call.
 ```json
 {
   "categories": [{ "name": "🍜 Food", "subcategories": ["Drinks"] }],
-  "renames": [{ "from": "Food", "to": "🍜 Food" }]
+  "renames": [{ "from": "Food", "to": "🍜 Food" }],
+  "incomeCategories": [{ "name": "💰 Salary", "subcategories": [] }],
+  "incomeRenames": [{ "from": "Salary", "to": "💰 Salary" }]
 }
 ```
 
-Renames are applied retroactively to every existing expense, across all months.
-Deletions are deliberately not — past expenses keep their old category.
+Both lists are optional and are patched independently, so a client saving only one
+cannot clobber the other.
+
+Renames are applied retroactively to every existing row, across all months, and are
+**scoped to their own type** — `incomeRenames` never touch expense rows and vice
+versa. This matters because the two lists are independent and names may collide
+(🎁 Gift ships in both defaults). Deletions are deliberately not applied — past
+entries keep their old category.
 
 **Success response** (200): `{ "metadata": { ... }, "updatedCount": 12 }`
 
@@ -273,11 +284,13 @@ the two calls.
 | `Note` + `Description` | `note`, joined with ` — ` when both are present |
 | `<BASE>` (e.g. `SGD`) | `amount`, rounded to 2dp. The header names the file's base currency |
 | `Amount` + `Currency` | `originalAmount` + `currency`, with `rate = originalAmount / amount` |
-| `Income/Expense` | filter — only `Exp.` rows are imported |
+| `Income/Expense` | `type` — `Exp.` and `Income` rows both import; `Transfer` is skipped |
 
 `Period` cells are formatted `dd/MM/yyyy` but hold a real time fraction, so the
-time-of-day survives in `createdAt`. Income rows, transfers and account names have no
-home in this schema and are skipped or dropped, each with its own count in the response.
+time-of-day survives in `createdAt`. Income rows map against the user's **income**
+category list; expense rows against the expense one, so the same source name can land
+in both. Transfers and account names have no home in this schema and are skipped or
+dropped, each with its own count in the response.
 Zero amounts are **kept** — in these exports they are deliberate records of a refund, a
 voucher, or something a friend paid for.
 
@@ -292,7 +305,7 @@ Parses the upload and reports what would happen. **Writes nothing.**
 ```json
 {
   "baseCurrency": "SGD",
-  "totals": { "rows": 450, "importable": 425, "skippedIncome": 25, "skippedTransfer": 0, "skippedInvalid": 0 },
+  "totals": { "rows": 450, "importable": 450, "importableIncome": 25, "skippedTransfer": 0, "skippedInvalid": 0 },
   "zeroAmountRows": 3,
   "dateRange": { "from": "2025-12-31", "to": "2027-01-06" },
   "currencies": ["SGD", "CNY", "MYR", "USD"],
@@ -325,26 +338,29 @@ header is a bare 3-letter currency code).
 
 **Auth required**: Yes · **Body**: `multipart/form-data`, field `file` + field `mapping`
 
-`mapping` is a JSON string: `{ "mappings": [{ sourceCategory, sourceSubcategory, parent, sub }] }`.
-Every pair present in the file must be covered, or the request is rejected 400 without
-writing anything.
+`mapping` is a JSON string: `{ "mappings": [{ kind, sourceCategory, sourceSubcategory, parent, sub }] }`.
+Every (kind, category, subcategory) triple present in the file must be covered, or the
+request is rejected 400 without writing anything. `kind` defaults to `"expense"` when
+omitted.
 
-Categories the mapping invents are appended to the user's metadata (via the same partial
-`patch` the categories page uses) **before** the expenses are written, so no imported
-expense ever points at a category missing from Settings.
+Categories the mapping invents are appended to the matching list in the user's metadata
+(via the same partial `patch` the categories page uses) **before** the rows are written,
+so no imported entry ever points at a category missing from Settings.
 
-Rows matching an existing expense on `date + amount + note` are skipped, which also
-covers duplicates inside the file itself — so re-running an import is a no-op.
+Rows matching an existing entry on `type + date + amount + note` are skipped, which also
+covers duplicates inside the file itself — so re-running an import is a no-op. `type` is
+part of the key so a same-day, same-amount income and expense don't cancel each other out.
 
 **Success response** (200):
 ```json
 {
-  "imported": 425,
-  "skippedIncome": 25,
+  "imported": 450,
+  "importedIncome": 25,
   "skippedTransfer": 0,
   "skippedInvalid": 0,
   "skippedDuplicate": 0,
-  "categoriesCreated": ["Gaming", "👬🏻 Social Life", "⚽ Sports › Equipment"]
+  "categoriesCreated": ["Gaming", "👬🏻 Social Life", "⚽ Sports › Equipment"],
+  "incomeCategoriesCreated": ["🎠 Carousell"]
 }
 ```
 

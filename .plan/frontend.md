@@ -91,12 +91,14 @@ export default defineConfig({
 ### MonthHeader.tsx
 - Displays: "August 2026" format
 - Left arrow (←) / Right arrow (→) buttons
-- Shows monthly total amount
+- Shows In / Out / Net for the month — takes `income` and `expense` magnitudes and
+  derives the net itself
 - Receives `currentMonth` and `onMonthChange` props
 
 ### ExpenseList.tsx
-- Renders list of `ExpenseItem` components
-- Empty state: "No expenses this month" with emoji
+- Renders list of `ExpenseItem` components, expenses and income mixed chronologically
+- Per-day subtotal is a **net** (`signedAmount`), not a sum of magnitudes
+- Empty state: "Nothing this month" with emoji
 - Loading state: skeleton/spinner
 
 ### ExpenseItem.tsx
@@ -235,7 +237,7 @@ Use Tailwind's built-in palette. No custom colors needed.
 | Primary (pink) | `rose-400` | FAB, CTAs, selected states, highlights |
 | Accent (cyan) | `cyan-400` | Links, selected date, secondary highlights |
 | Secondary (purple) | `violet-400` | Gradients, decorative accents |
-| Positive | `lime-400` | Income indicators, success states |
+| Positive | `lime-400` | Income amounts and totals, success states |
 | Warning | `amber-400` | Warnings, caution |
 | Danger | `red-500` | Delete actions, errors |
 | Primary text | `text-zinc-100` | Main text, headings |

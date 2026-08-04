@@ -1,7 +1,14 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { metadataModel, DEFAULT_CATEGORIES, DEFAULT_BASE_CURRENCY } from './metadata.model.js'
+import {
+  metadataModel,
+  DEFAULT_CATEGORIES,
+  DEFAULT_INCOME_CATEGORIES,
+  DEFAULT_BASE_CURRENCY,
+} from './metadata.model.js'
 import { expenseModel } from '../expense/expense.model.js'
+import type { TransactionType } from '../expense/expense.types.d.js'
+import type { CategoryRename } from './metadata.types.d.js'
 
 const categoryName = z
   .string()
@@ -30,15 +37,45 @@ const saveCurrencySchema = z.object({
     .refine(hasNoDuplicates, 'Currencies must be unique'),
 })
 
+const categoryList = z
+  .array(categorySchema)
+  .refine((cats) => hasNoDuplicates(cats.map((c) => c.name)), 'Category names must be unique')
+
+const renameList = z
+  .array(z.object({ from: z.string().min(1), to: z.string().min(1) }))
+  .optional()
+  .default([])
+
+// Both lists are optional so a client saving only one can't clobber the other.
 const saveCategoriesSchema = z.object({
-  categories: z
-    .array(categorySchema)
-    .refine((cats) => hasNoDuplicates(cats.map((c) => c.name)), 'Category names must be unique'),
-  renames: z
-    .array(z.object({ from: z.string().min(1), to: z.string().min(1) }))
-    .optional()
-    .default([]),
+  categories: categoryList.optional(),
+  renames: renameList,
+  incomeCategories: categoryList.optional(),
+  incomeRenames: renameList,
 })
+
+/**
+ * Applies renames to existing rows of one type. Most specific first, so
+ * "Food#Drinks" is rewritten before "Food" sweeps up whatever is left under the old
+ * parent name. Returns how many rows were touched.
+ */
+async function applyRenames(
+  userId: string,
+  renames: CategoryRename[],
+  type: TransactionType
+): Promise<number> {
+  const ordered = [...renames].sort((a, b) => {
+    const depth = b.from.split('#').length - a.from.split('#').length
+    return depth !== 0 ? depth : b.from.length - a.from.length
+  })
+
+  let updated = 0
+  for (const { from, to } of ordered) {
+    if (from === to) continue
+    updated += await expenseModel.renameCategory(userId, from, to, type)
+  }
+  return updated
+}
 
 export const metadataController = {
   async getMetadata(req: Request, res: Response) {
@@ -52,6 +89,7 @@ export const metadataController = {
       // First load for this user: seed the defaults so the shape is always present
       const metadata = await metadataModel.patch(req.userId!, {
         categories: DEFAULT_CATEGORIES,
+        incomeCategories: DEFAULT_INCOME_CATEGORIES,
         baseCurrency: DEFAULT_BASE_CURRENCY,
         currencies: [],
       })
@@ -69,23 +107,17 @@ export const metadataController = {
       return res.status(400).json({ error: parsed.error.flatten() })
     }
 
-    const { categories, renames } = parsed.data
-
-    // Most specific first, so "Food#Drinks" is rewritten before "Food" sweeps up
-    // whatever is left under the old parent name.
-    const ordered = [...renames].sort((a, b) => {
-      const depth = b.from.split('#').length - a.from.split('#').length
-      return depth !== 0 ? depth : b.from.length - a.from.length
-    })
+    const { categories, renames, incomeCategories, incomeRenames } = parsed.data
 
     try {
-      let updatedCount = 0
-      for (const { from, to } of ordered) {
-        if (from === to) continue
-        updatedCount += await expenseModel.renameCategory(req.userId!, from, to)
-      }
+      const updatedCount =
+        (await applyRenames(req.userId!, renames, 'expense')) +
+        (await applyRenames(req.userId!, incomeRenames, 'income'))
 
-      const metadata = await metadataModel.patch(req.userId!, { categories })
+      const metadata = await metadataModel.patch(req.userId!, {
+        ...(categories && { categories }),
+        ...(incomeCategories && { incomeCategories }),
+      })
       return res.json({ metadata, updatedCount })
     } catch (err) {
       console.error('Error saving categories:', err)

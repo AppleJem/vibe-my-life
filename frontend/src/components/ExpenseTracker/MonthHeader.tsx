@@ -3,13 +3,16 @@ import { formatAmount } from '../../utils/currency'
 
 interface MonthHeaderProps {
   yearMonth: string  // "2026-08"
-  total: number
+  /** Magnitudes, both positive. Net is derived here, not passed in. */
+  income: number
+  expense: number
   onPrevious: () => void
   onNext: () => void
 }
 
-export function MonthHeader({ yearMonth, total, onPrevious, onNext }: MonthHeaderProps) {
+export function MonthHeader({ yearMonth, income, expense, onPrevious, onNext }: MonthHeaderProps) {
   const { baseCurrency } = useCurrency()
+  const net = income - expense
   const [year, month] = yearMonth.split('-').map(Number)
   const monthName = new Date(year, month - 1).toLocaleString('en-US', {
     month: 'long',
@@ -41,10 +44,22 @@ export function MonthHeader({ yearMonth, total, onPrevious, onNext }: MonthHeade
       </div>
 
       <div className="text-center">
-        <p className="text-sm text-zinc-400">Total</p>
-        <p className="text-2xl font-bold text-zinc-100">
-          {formatAmount(total, baseCurrency)}
+        <p className="text-sm text-zinc-400">Net</p>
+        <p className={`text-2xl font-bold ${net > 0 ? 'text-lime-400' : 'text-zinc-100'}`}>
+          {/* The sign is explicit on a positive net; a negative amount already carries
+              its own minus, so prefixing would double it up. */}
+          {net > 0 && '+'}
+          {formatAmount(net, baseCurrency)}
         </p>
+
+        <div className="mt-1 flex items-center justify-center gap-4 text-sm">
+          <span className="text-zinc-500">
+            In <span className="text-lime-400">{formatAmount(income, baseCurrency)}</span>
+          </span>
+          <span className="text-zinc-500">
+            Out <span className="text-zinc-300">{formatAmount(expense, baseCurrency)}</span>
+          </span>
+        </div>
       </div>
     </div>
   )

@@ -1,7 +1,21 @@
+/**
+ * Money out vs money in. Rows written before income existed carry no `type` at all,
+ * so **absent always reads as `'expense'`** — never compare `type` directly, go
+ * through the `?? 'expense'` fallback.
+ */
+export type TransactionType = 'expense' | 'income'
+
 export interface Expense {
   id: string
   date: string          // YYYY-MM-DD
-  amount: number        // always in baseCurrency
+  /**
+   * Always in baseCurrency, and always a positive magnitude — the sign is
+   * presentation, derived from `type`. Nothing here is ever stored negative.
+   */
+  amount: number
+  /** Absent on rows written before income existed; treat as 'expense'. */
+  type?: TransactionType
+  /** Belongs to the category list matching `type` — the two lists are independent. */
   category: string
   note: string
   /** Free-form long-form comment. Absent on rows written before the field existed. */
@@ -21,6 +35,7 @@ export interface Expense {
 export interface CreateExpenseInput {
   date: string
   amount: number
+  type?: TransactionType
   category: string
   note?: string
   remarks?: string
@@ -42,6 +57,8 @@ export interface ImportExpenseInput extends CreateExpenseInput {
 export interface UpdateExpenseInput {
   date?: string
   amount?: number
+  // Flipping the type is a plain field update — the sort key doesn't encode it.
+  type?: TransactionType
   category?: string
   note?: string
   remarks?: string

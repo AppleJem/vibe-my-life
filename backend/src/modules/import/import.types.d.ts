@@ -1,16 +1,20 @@
 /**
  * Shapes for importing a Money Manager-style .xlsx backup.
  *
- * The source file carries three things this app has no schema for — accounts,
- * income rows and transfers. They are dropped or skipped, and every drop is
- * counted so the summary can tell the user exactly what did not make it in.
+ * The source file carries two things this app has no schema for — accounts and
+ * transfers. They are dropped or skipped, and every drop is counted so the summary
+ * can tell the user exactly what did not make it in. Income rows import as income.
  */
 
-/** One importable expense row, after parsing but before category mapping. */
+import type { TransactionType } from '../expense/expense.types.d.js'
+
+/** One importable row, after parsing but before category mapping. */
 export interface ParsedRow {
   date: string          // YYYY-MM-DD, read in UTC
   createdAt: string     // full ISO timestamp — preserves the file's time-of-day
-  amount: number        // in the file's base currency, rounded to 2dp
+  amount: number        // magnitude in the file's base currency, rounded to 2dp
+  /** Which category list this row maps into, and the `type` it is written with. */
+  kind: TransactionType
   note: string          // Note, with Description appended when present
   sourceCategory: string
   sourceSubcategory: string | null
@@ -23,7 +27,6 @@ export interface ParsedRow {
 }
 
 export interface SkipCounts {
-  income: number
   transfer: number
   invalid: number
 }
@@ -41,10 +44,14 @@ export interface ParseResult {
 }
 
 /**
- * Where one distinct (Category, Subcategory) pair from the file should land.
+ * Where one distinct (kind, Category, Subcategory) triple from the file should land.
  * `sub: null` means "file it directly under the parent, no subcategory".
+ *
+ * `kind` is part of the identity, not decoration: the same source category name can
+ * appear on both income and expense rows and must map into the respective list.
  */
 export interface CategoryMapping {
+  kind: TransactionType
   sourceCategory: string
   sourceSubcategory: string | null
   parent: string
@@ -63,8 +70,9 @@ export interface ImportPreview {
   baseCurrency: string
   totals: {
     rows: number
+    /** Expense + income rows that will be written. */
     importable: number
-    skippedIncome: number
+    importableIncome: number
     skippedTransfer: number
     skippedInvalid: number
   }
@@ -80,9 +88,11 @@ export interface ImportPreview {
 
 export interface ImportResult {
   imported: number
-  skippedIncome: number
+  /** Subset of `imported` that landed as income. */
+  importedIncome: number
   skippedTransfer: number
   skippedInvalid: number
   skippedDuplicate: number
   categoriesCreated: string[]
+  incomeCategoriesCreated: string[]
 }

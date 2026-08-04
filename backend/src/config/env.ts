@@ -16,7 +16,16 @@ const envSchema = z.object({
 
   // Server
   PORT: z.string().default('3001').transform(Number),
-  FRONTEND_URL: z.string().default('http://localhost:5173'),
+  // Comma-separated list of allowed frontend origins
+  FRONTEND_URL: z
+    .string()
+    .default('http://localhost:5173')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((url) => url.trim().replace(/\/$/, ''))
+        .filter(Boolean)
+    ),
 })
 
 const parsed = envSchema.safeParse(process.env)

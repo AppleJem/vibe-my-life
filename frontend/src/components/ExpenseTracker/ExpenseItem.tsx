@@ -3,6 +3,7 @@ import type { Expense } from '../../types/expense'
 import { displayCategory } from '../../constants/categories'
 import { useCurrency } from '../../contexts/MetadataContext'
 import { formatAmount } from '../../utils/currency'
+import { isIncome } from '../../utils/transaction'
 import { ConfirmDialog } from '../ConfirmDialog'
 
 interface ExpenseItemProps {
@@ -26,7 +27,12 @@ export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
     }
   }
 
-  const amountLabel = formatAmount(expense.amount, expense.baseCurrency ?? baseCurrency)
+  // Amounts are stored as magnitudes for both types, so the sign is added here.
+  const income = isIncome(expense)
+  const amountLabel = `${income ? '+' : '−'}${formatAmount(
+    expense.amount,
+    expense.baseCurrency ?? baseCurrency
+  )}`
 
   return (
     <div className="relative overflow-hidden rounded-xl">
@@ -46,7 +52,9 @@ export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
           {/* Base-currency value leads; the amount as actually spent sits underneath.
               Legacy rows have no `currency` and stay single-line. */}
           <div className="text-right">
-            <span className="text-zinc-100 font-semibold">{amountLabel}</span>
+            <span className={`font-semibold ${income ? 'text-lime-400' : 'text-zinc-100'}`}>
+              {amountLabel}
+            </span>
             {expense.currency && expense.originalAmount != null && (
               <p className="text-zinc-500 text-xs">
                 {formatAmount(expense.originalAmount, expense.currency)}
@@ -59,7 +67,7 @@ export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
               setConfirmOpen(true)
             }}
             className="text-zinc-600 hover:text-red-400 transition-colors p-1"
-            title="Delete expense"
+            title={income ? 'Delete income' : 'Delete expense'}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -70,7 +78,7 @@ export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
 
       <ConfirmDialog
         isOpen={confirmOpen}
-        title="Delete this expense?"
+        title={income ? 'Delete this income?' : 'Delete this expense?'}
         message={`${displayCategory(expense.category)} · ${amountLabel}`}
         isConfirming={isDeleting}
         onConfirm={handleConfirmDelete}

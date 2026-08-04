@@ -1,10 +1,19 @@
 import { PutCommand, QueryCommand, GetCommand, DeleteCommand, UpdateCommand, BatchWriteCommand } from '@aws-sdk/lib-dynamodb'
 import { v4 as uuidv4 } from 'uuid'
 import { docClient, TABLE_NAME } from '../../config/db.js'
-import type { Expense, CreateExpenseInput, ImportExpenseInput, UpdateExpenseInput } from './expense.types.d.js'
+import type {
+  Expense,
+  CreateExpenseInput,
+  ImportExpenseInput,
+  UpdateExpenseInput,
+  TransactionType,
+} from './expense.types.d.js'
 
 /** DynamoDB's hard cap on items per BatchWriteItem call. */
 const BATCH_SIZE = 25
+
+/** Rows written before income existed have no `type` and are expenses. */
+const typeOf = (expense: Expense): TransactionType => expense.type ?? 'expense'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -17,6 +26,9 @@ export const expenseModel = {
       id,
       date: input.date,
       amount: input.amount,
+      // Written unconditionally, unlike the currency fields below — an always-present
+      // `type` means flipping expense↔income later is a plain SET, never a REMOVE.
+      type: input.type ?? 'expense',
       category: input.category,
       note: input.note ?? '',
       remarks: input.remarks ?? '',
@@ -60,6 +72,7 @@ export const expenseModel = {
       id: uuidv4(),
       date: input.date,
       amount: input.amount,
+      type: input.type ?? 'expense',
       category: input.category,
       note: input.note ?? '',
       remarks: input.remarks ?? '',
@@ -141,12 +154,23 @@ export const expenseModel = {
     return items
   },
 
-  // Rewrites the category of every expense under `from`, including its subcategories
-  // ("Food" also moves "Food#Drinks"). Returns how many items were changed.
-  async renameCategory(userId: string, from: string, to: string): Promise<number> {
+  // Rewrites the category of every row of `type` under `from`, including its
+  // subcategories ("Food" also moves "Food#Drinks"). Returns how many items changed.
+  //
+  // The type filter is load-bearing: expense and income keep independent category
+  // lists, and a name can legitimately exist in both (🎁 Gift ships in both defaults).
+  // Renaming one list must not rewrite the other's rows.
+  async renameCategory(
+    userId: string,
+    from: string,
+    to: string,
+    type: TransactionType
+  ): Promise<number> {
     const all = await this.getAll(userId)
     const affected = all.filter(
-      (e) => e.category === from || e.category.startsWith(`${from}#`)
+      (e) =>
+        typeOf(e) === type &&
+        (e.category === from || e.category.startsWith(`${from}#`))
     )
 
     const CHUNK_SIZE = 25
@@ -186,7 +210,7 @@ export const expenseModel = {
 
   async update(userId: string, date: string, expenseId: string, updates: UpdateExpenseInput): Promise<Expense> {
     const UPDATABLE = [
-      'date', 'amount', 'category', 'note', 'remarks',
+      'date', 'amount', 'type', 'category', 'note', 'remarks',
       'baseCurrency', 'currency', 'originalAmount', 'rate',
     ] as const
 

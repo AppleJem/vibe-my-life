@@ -8,14 +8,19 @@ export function decimalsFor(code: string): number {
   return metaFor(code).decimals
 }
 
-/** e.g. formatAmount(12.8, 'SGD') → "S$12.80"; formatAmount(1500, 'JPY') → "¥1,500" */
+/**
+ * e.g. formatAmount(12.8, 'SGD') → "S$12.80"; formatAmount(1500, 'JPY') → "¥1,500".
+ *
+ * The sign leads the symbol — "-S$12.50", not "S$-12.50". Stored amounts are always
+ * positive magnitudes, but derived figures (a month's net, a day's subtotal) are not.
+ */
 export function formatAmount(amount: number, code: string): string {
   const { symbol, decimals } = metaFor(code)
-  const formatted = amount.toLocaleString('en-US', {
+  const formatted = Math.abs(amount).toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
-  return `${symbol}${formatted}`
+  return `${amount < 0 ? '-' : ''}${symbol}${formatted}`
 }
 
 /**

@@ -17,10 +17,28 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { name: '📦 Other', subcategories: [] },
 ]
 
+export const DEFAULT_INCOME_CATEGORIES: Category[] = [
+  { name: '💰 Salary', subcategories: [] },
+  { name: '🎉 Bonus', subcategories: [] },
+  { name: '📈 Investment', subcategories: [] },
+  { name: '💼 Freelance', subcategories: [] },
+  { name: '🎁 Gift', subcategories: [] },
+  { name: '🔄 Refund', subcategories: [] },
+  { name: '🏠 Rental', subcategories: [] },
+  { name: '📦 Other', subcategories: [] },
+]
+
 export const DEFAULT_BASE_CURRENCY = 'SGD'
 
 const toMetadata = (item: Record<string, unknown>): ExpenseMetadata => ({
   categories: (item.categories ?? []) as Category[],
+  // Absent means "never set", which is every user who existed before income shipped
+  // — their META item predates the key and the controller's first-load seed will
+  // never fire for them, so this read-time default is what backfills them. An
+  // explicit [] (all income categories deleted) is preserved.
+  incomeCategories: (item.incomeCategories === undefined
+    ? DEFAULT_INCOME_CATEGORIES
+    : item.incomeCategories) as Category[],
   baseCurrency: (item.baseCurrency ?? DEFAULT_BASE_CURRENCY) as string,
   currencies: (item.currencies ?? []) as string[],
   updatedAt: (item.updatedAt ?? '') as string,

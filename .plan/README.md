@@ -61,7 +61,7 @@ vibeMyLife/
 │                   ├── DatePicker.tsx
 │                   ├── Calculator.tsx
 │                   ├── CategoryPicker.tsx
-│                   └── NoteInput.tsx
+│                   └── TextAreaInput.tsx
 │
 └── backend/
     ├── .env                         # AWS_*, DYNAMO_TABLE, JWT_SECRET, etc.

@@ -3,8 +3,10 @@ import { CategoryDonut } from './CategoryDonut'
 import { CategoryLegendList } from './CategoryLegendList'
 import { buildSlices } from './slices'
 import { ExpenseList } from '../ExpenseList'
+import { TypeToggle } from '../../TypeToggle'
 import { useCurrency } from '../../../contexts/MetadataContext'
-import type { Expense } from '../../../types/expense'
+import { ofType, sumOf } from '../../../utils/transaction'
+import type { Expense, TransactionType } from '../../../types/expense'
 
 interface CategoryBreakdownProps {
   expenses: Expense[]
@@ -21,18 +23,39 @@ export function CategoryBreakdown({
 }: CategoryBreakdownProps) {
   const { baseCurrency } = useCurrency()
   const [selected, setSelected] = useState<string | null>(null)
+  const [type, setType] = useState<TransactionType>('expense')
 
-  const slices = useMemo(() => buildSlices(expenses, baseCurrency), [expenses, baseCurrency])
-  const total = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses])
+  // One donut per type, never a merged one: the two directions have separate category
+  // lists, and a denominator mixing them would make every percentage meaningless.
+  const rows = useMemo(() => ofType(expenses, type), [expenses, type])
+  const slices = useMemo(() => buildSlices(rows, baseCurrency), [rows, baseCurrency])
+  const total = useMemo(() => sumOf(rows), [rows])
 
   // A month can lose a category after an edit, a delete, or a month change. Deriving
   // `active` by lookup means a stale selection simply falls back to the full list
   // instead of showing an empty drill-in.
   const active = selected ? slices.find((s) => s.parent === selected) ?? null : null
 
+  // The switcher renders above every branch — an empty income month must still offer
+  // a way back to the expense donut.
+  const switcher = (
+    <div className="flex justify-center mb-4" onClick={(e) => e.stopPropagation()}>
+      <TypeToggle
+        inline
+        value={type}
+        onChange={(next) => {
+          setType(next)
+          // The selected parent belongs to the other list.
+          setSelected(null)
+        }}
+      />
+    </div>
+  )
+
   if (loading) {
     return (
       <div className="space-y-3">
+        {switcher}
         <div className="h-64 bg-zinc-800 rounded-xl animate-pulse" />
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-16 bg-zinc-800 rounded-xl animate-pulse" />
@@ -43,9 +66,16 @@ export function CategoryBreakdown({
 
   if (slices.length === 0) {
     return (
-      <div className="text-center py-12">
-        <p className="text-zinc-500 text-sm">No expenses this month</p>
-        <p className="text-zinc-600 text-xs mt-1">Tap + to add your first expense</p>
+      <div>
+        {switcher}
+        <div className="text-center py-12">
+          <p className="text-zinc-500 text-sm">
+            No {type === 'income' ? 'income' : 'expenses'} this month
+          </p>
+          <p className="text-zinc-600 text-xs mt-1">
+            Tap + to add {type === 'income' ? 'some' : 'your first expense'}
+          </p>
+        </div>
       </div>
     )
   }
@@ -53,6 +83,7 @@ export function CategoryBreakdown({
   return (
     // Clicking anywhere that isn't a slice or a row clears the selection.
     <div onClick={() => setSelected(null)}>
+      {switcher}
       <CategoryDonut
         slices={slices}
         total={total}

@@ -97,7 +97,7 @@
 - [x] Add `exceljs` + `multer` to the backend
 - [x] Create `import/import.parser.ts` — pure Buffer → rows, headers resolved by name
 - [x] Preserve the time-of-day the source file hides behind a `dd/MM/yyyy` cell format
-- [x] Skip income and transfer rows; drop the two `Accounts` columns
+- [x] Skip transfer rows; drop the two `Accounts` columns (income rows import as of Phase 12)
 - [x] Join `Note` + `Description` so neither is lost
 - [x] Keep zero-amount rows (refunds, vouchers) rather than treating them as invalid
 - [x] Add `expenseModel.createMany` — `BatchWriteCommand`, 25/chunk, retries `UnprocessedItems`
@@ -111,3 +111,19 @@
 - [x] Add "Import backup" row to the settings page
 - [x] `backend/scripts/check-import.ts` — parser cross-check against a real export
 - [ ] Run a real import end-to-end against the live table
+
+## Phase 12: Income
+- [x] Add `type: 'expense' | 'income'` to the expense item; absent reads as `expense`
+- [x] Keep the `EXPENSE#` sort-key prefix so one month query still returns everything
+- [x] Scope `expenseModel.renameCategory` by type — names collide across the two lists
+- [x] Add `incomeCategories` to metadata, defaulting at read time for pre-income users
+- [x] `PUT /metadata/categories` takes both lists + both rename sets, patched independently
+- [x] Import income rows instead of skipping them; fold the kind into mapping + dedupe keys
+- [x] Shared `components/TypeToggle.tsx` — pill switcher used in 3 places
+- [x] `utils/transaction.ts` — the one home for the absent-type-means-expense rule
+- [x] MonthHeader shows In / Out / Net; ExpenseList day subtotals become nets
+- [x] ExpenseItem renders income with `+` and `lime-400`
+- [x] CategoryBreakdown gets its own expense/income switch (never one mixed donut)
+- [x] AddExpenseModal parameterised by type — toggle, accent, copy, category source
+- [x] Categories settings page gains an expense/income tab over two drafts, one save
+- [ ] Walk the flows manually against the live table (see the plan's verification list)

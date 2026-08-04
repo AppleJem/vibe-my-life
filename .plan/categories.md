@@ -1,5 +1,11 @@
 # Category Presets
 
+Expense and income keep two independent lists. Names may overlap between them (🎁 Gift is
+in both) — a category is only ever resolved within its own type, and renames are scoped the
+same way.
+
+## Expense
+
 | Key | Label | Emoji |
 |-----|-------|-------|
 | food | Food | 🍜 |
@@ -14,6 +20,23 @@
 | dating | Dating | 💕 |
 | travel | Travel | ✈️ |
 | other | Other | 📦 |
+
+## Income
+
+| Key | Label | Emoji |
+|-----|-------|-------|
+| salary | Salary | 💰 |
+| bonus | Bonus | 🎉 |
+| investment | Investment | 📈 |
+| freelance | Freelance | 💼 |
+| gift | Gift | 🎁 |
+| refund | Refund | 🔄 |
+| rental | Rental | 🏠 |
+| other | Other | 📦 |
+
+Both lists live in `frontend/src/constants/categories.ts` as `DEFAULT_CATEGORIES` and
+`DEFAULT_INCOME_CATEGORIES` (fallbacks only — the backend seeds the real lists), mirrored in
+`backend/src/modules/metadata/metadata.model.ts`.
 
 ## TypeScript Constant
 

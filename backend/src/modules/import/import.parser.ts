@@ -201,7 +201,7 @@ export async function parseBackup(buffer: Buffer): Promise<ParseResult> {
   const columns = resolveColumns(sheet.getRow(1))
 
   const rows: ParsedRow[] = []
-  const skipped: SkipCounts = { income: 0, transfer: 0, invalid: 0 }
+  const skipped: SkipCounts = { transfer: 0, invalid: 0 }
   const warnings: string[] = []
   const accounts = new Set<string>()
   const currencies = new Set<string>()
@@ -235,10 +235,6 @@ export async function parseBackup(buffer: Buffer): Promise<ParseResult> {
     if (currencyText) currencies.add(currencyText)
 
     const kind = classify(typeText)
-    if (kind === 'income') {
-      skipped.income++
-      continue
-    }
     if (kind === 'transfer') {
       skipped.transfer++
       continue
@@ -256,11 +252,15 @@ export async function parseBackup(buffer: Buffer): Promise<ParseResult> {
       continue
     }
 
-    if (baseValue === null || baseValue < 0) {
+    // Amounts are stored as magnitudes; the direction lives in `kind`. Money Manager
+    // exports income as a positive number, but some variants sign it — take the
+    // magnitude for income rather than rejecting a perfectly good row.
+    if (baseValue === null || (kind === 'expense' && baseValue < 0)) {
       skipped.invalid++
       warn(`Row ${rowNumber}: missing or negative amount — skipped.`)
       continue
     }
+    const baseMagnitude = Math.abs(baseValue)
 
     if (!categoryText) {
       skipped.invalid++
@@ -269,7 +269,7 @@ export async function parseBackup(buffer: Buffer): Promise<ParseResult> {
     }
 
     // Raw base amounts carry float artifacts (9.369999999999999) from the source app.
-    const amount = round(baseValue, 2)
+    const amount = round(baseMagnitude, 2)
 
     // Zero is a real, deliberate value in these exports — a refunded purchase, a meal
     // a friend paid for, something covered by a voucher. The note is the whole point
@@ -283,6 +283,7 @@ export async function parseBackup(buffer: Buffer): Promise<ParseResult> {
       date: date.toISOString().slice(0, 10),
       createdAt: date.toISOString(),
       amount,
+      kind,
       // Note is the short label, Description the long-form remark. Keeping both
       // is the difference between "Giga! plan" and knowing why it's dated the 1st.
       note: [note, description].filter(Boolean).join(' — '),
@@ -294,7 +295,8 @@ export async function parseBackup(buffer: Buffer): Promise<ParseResult> {
 
     // The three foreign fields travel together, and stay absent entirely when the
     // spend was in the base currency — that absence is the app's "not foreign" signal.
-    const originalAmount = cellNumber(at(columns.amount))
+    const originalValue = cellNumber(at(columns.amount))
+    const originalAmount = originalValue === null ? null : Math.abs(originalValue)
     if (currencyText && currencyText !== columns.baseCurrency && amount > 0) {
       if (originalAmount === null || originalAmount <= 0) {
         warn(`Row ${rowNumber}: ${currencyText} row has no original amount — importing the ${columns.baseCurrency} amount only.`)
@@ -309,7 +311,7 @@ export async function parseBackup(buffer: Buffer): Promise<ParseResult> {
     rows.push(parsed)
   }
 
-  if (rows.length === 0 && skipped.income === 0 && skipped.transfer === 0) {
+  if (rows.length === 0 && skipped.transfer === 0) {
     throw new ImportParseError('No importable rows were found in this file.')
   }
 

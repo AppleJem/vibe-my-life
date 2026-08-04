@@ -1,6 +1,7 @@
 import { ExpenseItem } from './ExpenseItem'
 import { useCurrency } from '../../contexts/MetadataContext'
 import { formatAmount } from '../../utils/currency'
+import { signedAmount } from '../../utils/transaction'
 import type { Expense } from '../../types/expense'
 
 interface ExpenseListProps {
@@ -29,9 +30,9 @@ export function ExpenseList({ expenses, loading, onDelete, onExpenseClick }: Exp
   if (expenses.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-zinc-500 text-sm">No expenses this month</p>
+        <p className="text-zinc-500 text-sm">Nothing this month</p>
         <p className="text-zinc-600 text-xs mt-1">
-          Tap + to add your first expense
+          Tap + to add an expense or income
         </p>
       </div>
     )
@@ -50,13 +51,18 @@ export function ExpenseList({ expenses, loading, onDelete, onExpenseClick }: Exp
     <div className="space-y-6">
       {sortedDates.map((date) => {
         const dayExpenses = grouped[date]
-        const dayTotal = dayExpenses.reduce((sum, e) => sum + e.amount, 0)
+        // Net for the day: a day with a 4,000 salary and a 12.50 lunch reads +3,987.50,
+        // not 4,012.50. `signedAmount` is what keeps the two directions apart.
+        const dayTotal = dayExpenses.reduce((sum, e) => sum + signedAmount(e), 0)
 
         return (
           <div key={date}>
             <div className="flex justify-between items-center mb-2">
               <p className="text-zinc-400 text-xs font-medium">{date}</p>
-              <p className="text-zinc-500 text-xs">{formatAmount(dayTotal, baseCurrency)}</p>
+              <p className={`text-xs ${dayTotal > 0 ? 'text-lime-400/70' : 'text-zinc-500'}`}>
+                {dayTotal > 0 && '+'}
+                {formatAmount(dayTotal, baseCurrency)}
+              </p>
             </div>
             <div className="space-y-2">
               {dayExpenses.map((expense) => (

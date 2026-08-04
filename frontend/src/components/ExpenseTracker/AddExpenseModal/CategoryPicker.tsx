@@ -1,12 +1,30 @@
 import { useCategories } from '../../../contexts/MetadataContext'
 import { parseCategory, formatCategory, type Category } from '../../../constants/categories'
+import type { TransactionType } from '../../../types/expense'
 
 interface CategoryPickerProps {
   value: string
   onChange: (category: string) => void
+  /** Which of the two independent category lists to show. */
+  type: TransactionType
 }
 
 const COLUMNS = 4
+
+// Tailwind needs the full class names present in the source, so these are spelled out
+// per type rather than composed from a colour token.
+const ACCENT: Record<TransactionType, { tile: string; text: string; pill: string }> = {
+  expense: {
+    tile: 'bg-rose-400/20 ring-2 ring-rose-400 shadow-lg shadow-rose-400/10',
+    text: 'text-rose-400',
+    pill: 'bg-rose-400/20 ring-1 ring-rose-400 text-rose-400',
+  },
+  income: {
+    tile: 'bg-lime-400/20 ring-2 ring-lime-400 shadow-lg shadow-lime-400/10',
+    text: 'text-lime-400',
+    pill: 'bg-lime-400/20 ring-1 ring-lime-400 text-lime-400',
+  },
+}
 
 function chunk<T>(items: T[], size: number): T[][] {
   const rows: T[][] = []
@@ -16,8 +34,10 @@ function chunk<T>(items: T[], size: number): T[][] {
   return rows
 }
 
-export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
-  const { categories } = useCategories()
+export function CategoryPicker({ value, onChange, type }: CategoryPickerProps) {
+  const { categories: expenseCategories, incomeCategories } = useCategories()
+  const categories = type === 'income' ? incomeCategories : expenseCategories
+  const accent = ACCENT[type]
   const { parent: selectedParent, sub: selectedSub } = parseCategory(value)
 
   const expanded = categories.find(
@@ -32,19 +52,27 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
         key={cat.name}
         onClick={() => onChange(cat.name)}
         className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg transition-all ${
-          isSelected
-            ? 'bg-rose-400/20 ring-2 ring-rose-400 shadow-lg shadow-rose-400/10'
-            : 'bg-zinc-800 hover:bg-zinc-700'
+          isSelected ? accent.tile : 'bg-zinc-800 hover:bg-zinc-700'
         }`}
       >
         <span
           className={`text-[11px] font-medium text-center leading-tight ${
-            isSelected ? 'text-rose-400' : 'text-zinc-400'
+            isSelected ? accent.text : 'text-zinc-400'
           }`}
         >
           {cat.name}
         </span>
       </button>
+    )
+  }
+
+  // Reachable: a list can be emptied from Settings, and income starts empty for anyone
+  // who deleted the seeded defaults.
+  if (categories.length === 0) {
+    return (
+      <p className="text-center text-xs text-zinc-500 py-6">
+        No {type} categories yet — add some in Settings › Configure Categories.
+      </p>
     )
   }
 
@@ -62,9 +90,7 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
                 <button
                   onClick={() => onChange(expanded.name)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    !selectedSub
-                      ? 'bg-rose-400/20 ring-1 ring-rose-400 text-rose-400'
-                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    !selectedSub ? accent.pill : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                   }`}
                 >
                   None
@@ -74,9 +100,7 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
                     key={sub}
                     onClick={() => onChange(formatCategory(expanded.name, sub))}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                      selectedSub === sub
-                        ? 'bg-rose-400/20 ring-1 ring-rose-400 text-rose-400'
-                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      selectedSub === sub ? accent.pill : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                     }`}
                   >
                     {sub}

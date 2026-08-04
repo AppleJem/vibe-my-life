@@ -7,6 +7,7 @@ import { AddExpenseModal } from '../../components/ExpenseTracker/AddExpenseModal
 import { CategoryBreakdown } from '../../components/ExpenseTracker/CategoryBreakdown/CategoryBreakdown'
 import { ViewTabs, type DashboardView } from '../../components/ExpenseTracker/ViewTabs'
 import { useExpenses } from '../../hooks/useExpenses'
+import { splitByType, sumOf } from '../../utils/transaction'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../types/expense'
 
 export const Route = createFileRoute('/_authenticated/')({
@@ -24,7 +25,10 @@ function DashboardPage() {
 
   const { expenses, loading, deleteExpense, addExpense, updateExpense } = useExpenses(yearMonth)
 
-  const total = expenses.reduce((sum, e) => sum + e.amount, 0)
+  // One query returns the whole month, both directions; the split is a render concern.
+  const split = splitByType(expenses)
+  const incomeTotal = sumOf(split.income)
+  const expenseTotal = sumOf(split.expenses)
 
   const goToPreviousMonth = useCallback(() => {
     setYearMonth((prev) => {
@@ -65,7 +69,8 @@ function DashboardPage() {
       <SwipeContainer onSwipeLeft={goToNextMonth} onSwipeRight={goToPreviousMonth}>
         <MonthHeader
           yearMonth={yearMonth}
-          total={total}
+          income={incomeTotal}
+          expense={expenseTotal}
           onPrevious={goToPreviousMonth}
           onNext={goToNextMonth}
         />

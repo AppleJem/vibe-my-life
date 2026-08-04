@@ -4,9 +4,14 @@ import { expenseModel } from './expense.model.js'
 
 const currencyCode = z.string().regex(/^[A-Z]{3}$/, 'Must be a 3-letter ISO currency code')
 
+const transactionType = z.enum(['expense', 'income'])
+
+// `amount` stays positive for both types — the sign is derived from `type` at render
+// time, so income and expense are stored identically apart from the discriminator.
 const createExpenseSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
   amount: z.number().positive('Amount must be positive'),
+  type: transactionType.optional().default('expense'),
   category: z.string().min(1, 'Category is required'),
   note: z.string().optional().default(''),
   remarks: z.string().optional().default(''),
@@ -21,6 +26,7 @@ const createExpenseSchema = z.object({
 const updateExpenseSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   amount: z.number().positive().optional(),
+  type: transactionType.optional(),
   category: z.string().min(1).optional(),
   note: z.string().optional(),
   remarks: z.string().optional(),

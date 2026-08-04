@@ -29,10 +29,18 @@ function check(label: string, actual: unknown, expected: unknown) {
 const result = await parseBackup(readFileSync(file))
 const { rows } = result
 
+// Income now imports rather than being skipped. The expectations below were
+// established against this file back when income was dropped, so the checks that
+// counted expense-shaped things stay scoped to `expenseRows` — that keeps them a
+// genuine cross-check rather than a re-derivation from the new behaviour.
+const expenseRows = rows.filter((r) => r.kind === 'expense')
+const incomeRows = rows.filter((r) => r.kind === 'income')
+
 console.log('\n--- totals ---')
 check('data rows', result.totalDataRows, 450)
-check('importable rows', rows.length, 425)
-check('income skipped', result.skipped.income, 25)
+check('importable rows', rows.length, 450)
+check('expense rows', expenseRows.length, 425)
+check('income rows', incomeRows.length, 25)
 check('transfers skipped', result.skipped.transfer, 0)
 check('invalid skipped', result.skipped.invalid, 0)
 // Refunded / voucher-paid / someone-else-paid records. Kept, not dropped.
@@ -44,9 +52,11 @@ check('warnings', result.warnings, [])
 
 console.log('\n--- dates ---')
 const dates = rows.map((r) => r.date).sort()
-// The file's overall range starts 2025-12-18, but that row is income; the earliest
-// *expense* is 2025-12-31.
-check('earliest date', dates[0], '2025-12-31')
+const expenseDates = expenseRows.map((r) => r.date).sort()
+// The file's overall range starts 2025-12-18 on an income row; the earliest
+// *expense* is 2025-12-31. Both are now in scope for the import.
+check('earliest date', dates[0], '2025-12-18')
+check('earliest expense date', expenseDates[0], '2025-12-31')
 check('latest date', dates[dates.length - 1], '2027-01-06')
 // Serial 46235.51490740741 -> 2026-08-01 12:21:28 UTC. The cell's number format is
 // dd/MM/yyyy, so Excel hides the time, but it is real and we keep it in createdAt.
@@ -54,7 +64,7 @@ const boulder = rows.find((r) => r.note.startsWith('Boulder planet membership fr
 check('time-carrying row date', boulder?.date, '2026-08-01')
 check('time-carrying row createdAt', boulder?.createdAt, '2026-08-01T12:21:28.000Z')
 check('no createdAt collapsed to midnight', rows.every((r) => r.createdAt.startsWith(r.date)), true)
-check('every row keeps its time-of-day', rows.filter((r) => !r.createdAt.endsWith('T00:00:00.000Z')).length, 425)
+check('every row keeps its time-of-day', rows.filter((r) => !r.createdAt.endsWith('T00:00:00.000Z')).length, 450)
 
 console.log('\n--- amounts & currency ---')
 check('no negative amounts', rows.every((r) => r.amount >= 0), true)
@@ -64,7 +74,7 @@ const artifact = rows.find((r) => r.note === 'Various expenses' && r.originalAmo
 check('float artifact rounded', artifact?.amount, 9.37)
 
 const foreign = rows.filter((r) => r.currency !== undefined)
-check('foreign rows', foreign.length, 32)
+check('foreign expense rows', expenseRows.filter((r) => r.currency !== undefined).length, 32)
 check('foreign rows carry all three fields',
   foreign.every((r) => r.originalAmount !== undefined && r.rate !== undefined), true)
 check('base rows carry none of the three',
@@ -80,8 +90,10 @@ check('rate reconstructs the base amount',
   foreign.every((r) => Math.abs(r.originalAmount! / r.rate! - r.amount) < 0.01), true)
 
 console.log('\n--- notes ---')
-// 20 rows in the file carry both, but one of them is income and so never imported.
-check('rows joining Note + Description', rows.filter((r) => r.note.includes(' — ')).length, 19)
+// 20 rows in the file carry both; one of them is income, which now imports too.
+check('rows joining Note + Description', rows.filter((r) => r.note.includes(' — ')).length, 20)
+check('expense rows joining Note + Description',
+  expenseRows.filter((r) => r.note.includes(' — ')).length, 19)
 const giga = rows.find((r) => r.note.startsWith('Giga! plan'))
 check('note + description joined',
   giga?.note,
@@ -90,11 +102,17 @@ check('notes are trimmed', rows.every((r) => r.note === r.note.trim()), true)
 check('no note contains the category separator', rows.every((r) => !r.note.includes('#')), true)
 
 console.log('\n--- categories ---')
-const pairs = new Set(rows.map((r) => `${r.sourceCategory}|${r.sourceSubcategory ?? ''}`))
-check('distinct (category, subcategory) pairs', pairs.size, 30)
-const parents = new Set(rows.map((r) => r.sourceCategory))
-check('distinct parents', parents.size, 15)
-check('income-only categories absent', parents.has('💰 Salary') || parents.has('🎠Carousell'), false)
+const pairs = new Set(expenseRows.map((r) => `${r.sourceCategory}|${r.sourceSubcategory ?? ''}`))
+check('distinct expense (category, subcategory) pairs', pairs.size, 30)
+const parents = new Set(expenseRows.map((r) => r.sourceCategory))
+check('distinct expense parents', parents.size, 15)
+// These two only ever appear on income rows, which is what makes them a good probe
+// that the kinds are being kept apart rather than pooled.
+const incomeParents = new Set(incomeRows.map((r) => r.sourceCategory))
+check('income-only categories land on income rows',
+  incomeParents.has('💰 Salary') || incomeParents.has('🎠Carousell'), true)
+check('income-only categories absent from expense rows',
+  parents.has('💰 Salary') || parents.has('🎠Carousell'), false)
 check('no category contains the separator',
   rows.every((r) => !r.sourceCategory.includes('#') && !(r.sourceSubcategory ?? '').includes('#')), true)
 check('categories are trimmed', rows.every((r) => r.sourceCategory === r.sourceCategory.trim()), true)
@@ -106,8 +124,8 @@ const APP_DEFAULTS = [
 ]
 const byNormalized = new Map(APP_DEFAULTS.map((n) => [normalizeCategoryName(n), n]))
 const matched = [...parents].filter((p) => byNormalized.has(normalizeCategoryName(p)))
-check('file parents auto-matching an app default', matched.length, 12)
-check('unmatched parents', [...parents].filter((p) => !byNormalized.has(normalizeCategoryName(p))).sort(),
+check('expense parents auto-matching an app default', matched.length, 12)
+check('unmatched expense parents', [...parents].filter((p) => !byNormalized.has(normalizeCategoryName(p))).sort(),
   ['Gaming', 'Joint account', '👬🏻 Social Life'])
 for (const source of matched.sort()) {
   console.log(`         ${source.padEnd(16)} -> ${byNormalized.get(normalizeCategoryName(source))}`)

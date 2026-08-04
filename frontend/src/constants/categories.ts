@@ -27,6 +27,19 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { name: '📦 Other', subcategories: [] },
 ]
 
+// Income keeps a completely separate list — names may overlap (🎁 Gift is in both)
+// and the two never mix in a picker or a chart.
+export const DEFAULT_INCOME_CATEGORIES: Category[] = [
+  { name: '💰 Salary', subcategories: [] },
+  { name: '🎉 Bonus', subcategories: [] },
+  { name: '📈 Investment', subcategories: [] },
+  { name: '💼 Freelance', subcategories: [] },
+  { name: '🎁 Gift', subcategories: [] },
+  { name: '🔄 Refund', subcategories: [] },
+  { name: '🏠 Rental', subcategories: [] },
+  { name: '📦 Other', subcategories: [] },
+]
+
 export function parseCategory(value: string): { parent: string; sub?: string } {
   const index = value.indexOf(CATEGORY_SEPARATOR)
   if (index === -1) return { parent: value }
