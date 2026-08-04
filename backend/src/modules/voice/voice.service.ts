@@ -94,7 +94,7 @@ async function transcribeAudio(audioBuffer: Buffer, mimeType: string): Promise<s
       model: 'whisper-large-v3-turbo',
       response_format: 'json',
     })
-    console.log('Groq transcription result:', result)
+    console.log('[voice] Groq transcription result:', result)
     return result.text
   } catch (error: any) {
     console.error('Groq transcription error:', error)
@@ -130,18 +130,10 @@ Return a JSON array of items. Each item should have:
 - "note": brief description of what the expense/income was for
 
 Valid expense categories:
-${formatCategories(categories).join('\n')}
+${formatCategories(categories).join(', ')}
 
 Valid income categories:
-${formatCategories(incomeCategories).join('\n')}
-
-Rules:
-1. Only extract items that are clearly expenses or income
-2. If a date is not mentioned, use today's date
-3. Category MUST match exactly one from the lists above (including emoji)
-4. If unsure about category, pick the most likely one from the list
-5. Keep notes concise but descriptive
-6. Return ONLY the JSON array, no other text
+${formatCategories(incomeCategories).join(', ')}
 
 Example response (using actual categories from the lists above):
 [
@@ -211,7 +203,6 @@ export const voiceService = {
     mimeType: string,
     categories: VoiceCategory[],
     incomeCategories: VoiceCategory[],
-    provider?: LLMProviderName
   ): Promise<{ transcript: string; items: ParsedExpenseItem[] }> {
     // Use provided categories or fall back to defaults
     const expenseCategories = categories.length > 0 ? categories :
@@ -220,17 +211,21 @@ export const voiceService = {
       DEFAULT_INCOME_CATEGORIES.map((name) => ({ name, subcategories: [] }))
 
     // Step 1: Transcribe audio using Groq ASR
-    console.log('Transcribing audio with Groq...')
+    console.log('[voice] ⏱️  ASR: starting transcription...')
+    const asrStart = Date.now()
     const transcript = await transcribeAudio(audioBuffer, mimeType)
-    console.log('Transcript:', transcript)
+    const asrMs = Date.now() - asrStart
+    console.log(`[voice] ✅ ASR: done in ${asrMs}ms`)
+    console.log('[voice] Transcript:', transcript)
 
     if (!transcript || transcript.trim().length === 0) {
       throw new Error('No speech detected in the audio recording')
     }
 
     // Step 2: Use LLM to parse transcript into expense items
-    console.log('Parsing transcript with LLM...')
-    console.log('Using categories:', expenseCategories.length, 'expense,', incCategories.length, 'income')
+    console.log('[voice] ⏱️  LLM: starting parse...')
+    console.log('[voice] Using categories:', expenseCategories.length, 'expense,', incCategories.length, 'income')
+    const llmStart = Date.now()
     const messages: LLMMessage[] = [
       {
         role: 'system',
@@ -243,14 +238,18 @@ export const voiceService = {
       },
     ]
 
+    console.log('LLM prompt for parseVoiceRecording', messages)
+
     const response = await llmClient.complete({
       messages,
       maxTokens: 4096,
-      provider,
+      provider: "gemini"
     })
+    const llmMs = Date.now() - llmStart
+    console.log(`[voice] ✅ LLM: done in ${llmMs}ms (model: ${response.model})`)
 
     const assistantMessage = response.content
-    console.log(`LLM response from ${provider || 'default'}:`, response.model)
+    console.log(`[voice] 📊 Total pipeline: ${asrMs + llmMs}ms (ASR: ${asrMs}ms, LLM: ${llmMs}ms)`)
 
     // Parse JSON from the response (handle potential markdown code blocks)
     let jsonStr = assistantMessage.trim()

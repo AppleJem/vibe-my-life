@@ -5,7 +5,7 @@ import type {
 } from '../llm.types.js'
 
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
-const DEFAULT_MODEL = 'gemini-2.5-flash'
+const DEFAULT_MODEL = 'gemini-3.1-flash-lite'
 
 export function createGeminiProvider(apiKey: string): LLMProvider {
   return {
@@ -58,10 +58,10 @@ export function createGeminiProvider(apiKey: string): LLMProvider {
         model: data.model || model,
         usage: data.usage
           ? {
-              promptTokens: data.usage.prompt_tokens,
-              completionTokens: data.usage.completion_tokens,
-              totalTokens: data.usage.total_tokens,
-            }
+            promptTokens: data.usage.prompt_tokens,
+            completionTokens: data.usage.completion_tokens,
+            totalTokens: data.usage.total_tokens,
+          }
           : undefined,
       }
     },
