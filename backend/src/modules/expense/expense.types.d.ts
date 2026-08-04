@@ -30,6 +30,13 @@ export interface Expense {
   currency?: string
   originalAmount?: number   // as typed, in `currency`
   rate?: number             // units of `currency` per 1 base, at save time
+
+  // Recurring. Present ⇒ this row was generated from a rule on the META item; absent ⇒
+  // hand-entered. `occurrenceDate` is the date the schedule asked for and never moves,
+  // while `date` may be dragged elsewhere by an edit — the two diverging is what lets
+  // "this and all future" still partition occurrences correctly.
+  recurringId?: string
+  occurrenceDate?: string   // YYYY-MM-DD
 }
 
 export interface CreateExpenseInput {
@@ -43,6 +50,8 @@ export interface CreateExpenseInput {
   currency?: string
   originalAmount?: number
   rate?: number
+  recurringId?: string
+  occurrenceDate?: string
 }
 
 /**
@@ -67,4 +76,8 @@ export interface UpdateExpenseInput {
   currency?: string | null
   originalAmount?: number | null
   rate?: number | null
+  // null detaches a generated row from its rule, which is what happens when the rule
+  // is deleted but its history is kept.
+  recurringId?: string | null
+  occurrenceDate?: string | null
 }

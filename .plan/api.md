@@ -264,6 +264,85 @@ categories and vice versa.
 
 ---
 
+## Recurring Endpoints
+
+Subscriptions and regular income. A *rule* is a schedule stored in `META.recurring`; the
+transactions it produces are ordinary expense rows carrying `recurringId` and
+`occurrenceDate`.
+
+Every endpoint takes a `today` field in `YYYY-MM-DD`, and it is the **client's local**
+today. The server runs in UTC and must not be the one deciding when a day rolls over, or a
+subscription fires early in Asia and late in the Americas.
+
+### GET /api/recurring
+
+**Success response** (200): `{ "rules": [ ... ] }`
+
+### POST /api/recurring
+
+Creates a rule and immediately writes anything already due — so a rule starting today
+produces its first transaction in the same call, while one starting next week produces
+nothing until catch-up reaches that date.
+
+**Request body**: the rule fields (`type`, `frequency`, `startDate`, `amount`, `category`,
+`note`, `remarks`, and the optional currency snapshot) plus `today`.
+
+`frequency` is one of `daily` | `weekly` | `monthly` | `yearly`. `startDate` is both the
+first occurrence and the anchor the rest are counted from — the weekday for `weekly`, the
+day-of-month for `monthly`, the month/day for `yearly`. Occurrences are computed by index
+from that anchor, never from the previous result, so month-end clamping doesn't drift: a
+rule on the 31st fires on Feb 28 and then Mar **31**.
+
+Foreign-currency rules store a `currency`/`originalAmount`/`rate` snapshot and repeat it
+verbatim on every generated row. The server has no FX access; a rule stays priced at the
+rate it was created with until someone edits it.
+
+**Success response** (201): `{ "rule": {...}, "created": [...], "months": ["2026-08"] }`
+
+### POST /api/recurring/run
+
+Catch-up. Writes every occurrence each rule owes since it last fired, up to `today`,
+across any number of months. Called once per local day per client session, on entry.
+
+**Request body**: `{ "today": "2026-08-04" }`
+
+**Success response** (200): `{ "created": [...], "months": [...] }` — `months` is what the
+client invalidates.
+
+Idempotent within a day by way of each rule's `lastRunDate` watermark. A generated row the
+user deleted is never resurrected: nothing compares the schedule against the table.
+
+### PUT /api/recurring/:id
+
+**Request body**: the same rule fields, plus:
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| propagate | `none` \| `future` \| `all` | No | How far the change reaches into rows already written. Default `none` |
+| from | string | No | Lower bound (by `occurrenceDate`) for `propagate: "future"`. Defaults to `today` |
+| today | string | Yes | Client's local date |
+
+`future` rewrites rows whose `occurrenceDate` is on or after `from`; `all` rewrites every
+row of the rule; `none` touches the rule alone. The rule's fields are updated in all three
+cases — "this and all future" means the *schedule* changes too.
+
+`date` is never propagated. An occurrence's date belongs to the occurrence, so
+rescheduling a rule doesn't drag written history around.
+
+**Success response** (200): `{ "rule": {...}, "updatedCount": 2, "months": [...] }`
+
+### DELETE /api/recurring/:id
+
+**Query**: `deleteItems=true|false`.
+
+`true` removes every row the rule generated. `false` keeps them but **clears their
+`recurringId`/`occurrenceDate`** — a dangling link would still draw the repeat badge and
+still prompt for a change scope on a schedule that no longer exists.
+
+**Success response** (200): `{ "deleted": 0, "detached": 2, "months": [...] }`
+
+---
+
 ## Import Endpoints
 
 Restores expenses from a Money Manager-style `.xlsx` export. Two phases: `analyze`

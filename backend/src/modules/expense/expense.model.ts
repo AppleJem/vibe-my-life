@@ -39,6 +39,8 @@ export const expenseModel = {
       ...(input.currency !== undefined && { currency: input.currency }),
       ...(input.originalAmount !== undefined && { originalAmount: input.originalAmount }),
       ...(input.rate !== undefined && { rate: input.rate }),
+      ...(input.recurringId !== undefined && { recurringId: input.recurringId }),
+      ...(input.occurrenceDate !== undefined && { occurrenceDate: input.occurrenceDate }),
     }
 
     await docClient.send(new PutCommand({
@@ -83,6 +85,8 @@ export const expenseModel = {
       ...(input.currency !== undefined && { currency: input.currency }),
       ...(input.originalAmount !== undefined && { originalAmount: input.originalAmount }),
       ...(input.rate !== undefined && { rate: input.rate }),
+      ...(input.recurringId !== undefined && { recurringId: input.recurringId }),
+      ...(input.occurrenceDate !== undefined && { occurrenceDate: input.occurrenceDate }),
     }))
 
     for (let i = 0; i < expenses.length; i += BATCH_SIZE) {
@@ -212,6 +216,7 @@ export const expenseModel = {
     const UPDATABLE = [
       'date', 'amount', 'type', 'category', 'note', 'remarks',
       'baseCurrency', 'currency', 'originalAmount', 'rate',
+      'recurringId', 'occurrenceDate',
     ] as const
 
     const setExpressions: string[] = []

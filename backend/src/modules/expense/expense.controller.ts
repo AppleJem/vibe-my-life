@@ -19,6 +19,10 @@ const createExpenseSchema = z.object({
   currency: currencyCode.optional(),
   originalAmount: z.number().positive().optional(),
   rate: z.number().positive().optional(),
+  // Rows generated from a recurring rule; the client never sends these on the plain
+  // create path, but the recurring module reuses this shape.
+  recurringId: z.string().min(1).optional(),
+  occurrenceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
 // null is accepted on the three foreign fields so the client can clear them when an

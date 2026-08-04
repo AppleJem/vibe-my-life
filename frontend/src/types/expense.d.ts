@@ -30,6 +30,13 @@ export interface Expense {
   currency?: string
   originalAmount?: number   // as typed, in `currency`
   rate?: number             // units of `currency` per 1 base, at save time
+
+  // Recurring. Present ⇒ generated from a rule in metadata; absent ⇒ hand-entered.
+  // `occurrenceDate` is the date the schedule asked for and never moves, while `date`
+  // can be dragged elsewhere by an edit — that's what keeps "this and all future"
+  // meaningful after someone shifts one month's payment by a few days.
+  recurringId?: string
+  occurrenceDate?: string   // YYYY-MM-DD
 }
 
 export interface CreateExpenseInput {
@@ -59,3 +66,48 @@ export interface UpdateExpenseInput {
   originalAmount?: number | null
   rate?: number | null
 }
+
+export type RecurringFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly'
+
+/**
+ * A schedule stored in metadata that materialises ordinary transactions. Everything
+ * from `amount` down is the template stamped onto each generated row.
+ */
+export interface RecurringRule {
+  id: string
+  type: TransactionType
+  frequency: RecurringFrequency
+  /** YYYY-MM-DD of the first occurrence, and the anchor the rest are counted from. */
+  startDate: string
+  /** YYYY-MM-DD of the newest occurrence already written. Absent = never fired. */
+  lastRunDate?: string
+  amount: number
+  category: string
+  note: string
+  remarks: string
+  baseCurrency?: string
+  currency?: string
+  originalAmount?: number
+  rate?: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** The rule fields a client may write; the rest is server-owned bookkeeping. */
+export interface RecurringRuleInput {
+  type: TransactionType
+  frequency: RecurringFrequency
+  startDate: string
+  amount: number
+  category: string
+  note: string
+  remarks: string
+  baseCurrency?: string
+  // null clears the field, exactly as on UpdateExpenseInput.
+  currency?: string | null
+  originalAmount?: number | null
+  rate?: number | null
+}
+
+/** How far an edit reaches into the rows a rule has already generated. */
+export type PropagateScope = 'none' | 'future' | 'all'

@@ -4,6 +4,9 @@ import type {
   CreateExpenseInput,
   UpdateExpenseInput,
   TransactionType,
+  RecurringRule,
+  RecurringRuleInput,
+  PropagateScope,
 } from '../types/expense'
 import type { Category } from '../constants/categories'
 
@@ -89,6 +92,61 @@ export const expenseApi = {
 
   async deleteExpense(id: string, date: string): Promise<void> {
     await api.delete(`/expenses/${id}`, { params: { date } })
+  },
+}
+
+/** Rows a recurring call wrote or rewrote, so the caller knows which months went stale. */
+export interface RecurringWriteResult {
+  rule: RecurringRule
+  months: string[]
+}
+
+/**
+ * Every call carries the client's **local** today. The server is UTC and must not be the
+ * one deciding when a day rolls over, or a subscription fires early in Asia and late in
+ * the Americas.
+ */
+export const recurringApi = {
+  async list(): Promise<RecurringRule[]> {
+    const { data } = await api.get('/recurring')
+    return data.rules
+  },
+
+  /** Creates the rule and materialises anything already due, including the first row. */
+  async create(
+    input: RecurringRuleInput,
+    today: string
+  ): Promise<RecurringWriteResult & { created: Expense[] }> {
+    const { data } = await api.post('/recurring', { ...input, today })
+    return data
+  },
+
+  /** Catch-up: writes every occurrence owed since each rule last fired. */
+  async run(today: string): Promise<{ created: Expense[]; months: string[] }> {
+    const { data } = await api.post('/recurring/run', { today })
+    return data
+  },
+
+  /**
+   * `propagate` decides how far the change reaches into existing rows; `from` is the
+   * occurrence date the "future" window opens at, defaulting to today.
+   */
+  async update(
+    id: string,
+    input: RecurringRuleInput,
+    options: { propagate: PropagateScope; from?: string; today: string }
+  ): Promise<RecurringWriteResult & { updatedCount: number }> {
+    const { data } = await api.put(`/recurring/${id}`, { ...input, ...options })
+    return data
+  },
+
+  /** `deleteItems` false detaches the generated rows instead of removing them. */
+  async remove(
+    id: string,
+    deleteItems: boolean
+  ): Promise<{ deleted: number; detached: number; months: string[] }> {
+    const { data } = await api.delete(`/recurring/${id}`, { params: { deleteItems } })
+    return data
   },
 }
 

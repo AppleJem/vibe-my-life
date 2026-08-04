@@ -3,15 +3,20 @@ import { DatePicker } from './DatePicker'
 import { Calculator } from './Calculator'
 import { CategoryPicker } from './CategoryPicker'
 import { TextAreaInput } from './TextAreaInput'
+import { FrequencyPicker, type FrequencyValue } from './FrequencyPicker'
 import { TypeToggle } from '../../TypeToggle'
+import { ChoiceDialog } from '../../ChoiceDialog'
 import { displayCategory } from '../../../constants/categories'
 import { useCurrency } from '../../../contexts/MetadataContext'
+import { useRecurringRules } from '../../../hooks/useRecurring'
 import { formatAmount, formatRate, toBase } from '../../../utils/currency'
+import { FREQUENCY_LABEL, formatDate } from '../../../utils/recurring'
 import { typeOf } from '../../../utils/transaction'
 import type {
   CreateExpenseInput,
   UpdateExpenseInput,
   Expense,
+  RecurringRuleInput,
   TransactionType,
 } from '../../../types/expense'
 
@@ -23,7 +28,7 @@ interface AddExpenseModalProps {
   onUpdate?: (id: string, date: string, updates: UpdateExpenseInput) => Promise<void>
 }
 
-type Field = 'date' | 'amount' | 'category' | 'note' | 'remarks'
+type Field = 'date' | 'amount' | 'category' | 'note' | 'remarks' | 'recurring'
 
 const FIELDS: { key: Field; label: string }[] = [
   { key: 'date', label: 'Date' },
@@ -31,14 +36,19 @@ const FIELDS: { key: Field; label: string }[] = [
   { key: 'category', label: 'Category' },
   { key: 'note', label: 'Note' },
   { key: 'remarks', label: 'Remarks' },
+  { key: 'recurring', label: 'Recurring' },
 ]
 
 /**
  * Fields that may be left blank. Confirm has to stay enabled on these — before
  * remarks existed, note was last and fell through to the save path, so nothing
- * ever had to skip past an empty optional field.
+ * ever had to skip past an empty optional field. `recurring` qualifies because
+ * "one-time" is a real answer, not an empty one.
  */
-const OPTIONAL_FIELDS: Field[] = ['note', 'remarks']
+const OPTIONAL_FIELDS: Field[] = ['note', 'remarks', 'recurring']
+
+/** How far an edit to one occurrence of a recurring rule reaches. */
+type EditScope = 'one' | 'future' | 'all'
 
 /**
  * Accent per type, spelled out because Tailwind only keeps class names it can see in
@@ -73,6 +83,13 @@ export function AddExpenseModal({
   const isEditMode = !!expense
 
   const { baseCurrency, currencies, rates, inputCurrency, setInputCurrency } = useCurrency()
+  const { rules, createRule, updateRule } = useRecurringRules()
+
+  // The schedule behind the occupied row, when there is one. Editing a generated row is
+  // partly an edit of its rule, so the modal needs the rule's frequency and start date.
+  const rule = expense?.recurringId
+    ? rules.find((r) => r.id === expense.recurringId)
+    : undefined
 
   const [activeField, setActiveField] = useState<Field>('date')
   const [type, setType] = useState<TransactionType>('expense')
@@ -83,7 +100,9 @@ export function AddExpenseModal({
   const [category, setCategory] = useState('')
   const [note, setNote] = useState('')
   const [remarks, setRemarks] = useState('')
+  const [frequency, setFrequency] = useState<FrequencyValue>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [scopeOpen, setScopeOpen] = useState(false)
 
   // Load the expense being edited (or a blank form) each time the modal opens
   useEffect(() => {
@@ -95,7 +114,9 @@ export function AddExpenseModal({
     setCategory(expense?.category ?? '')
     setNote(expense?.note ?? '')
     setRemarks(expense?.remarks ?? '')
+    setFrequency(null)
     setActiveField('date')
+    setScopeOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, expense])
 
@@ -156,6 +177,10 @@ export function AddExpenseModal({
         return note.trim() || '—'
       case 'remarks':
         return remarks.trim() || '—'
+      case 'recurring':
+        if (rule) return `${FREQUENCY_LABEL[rule.frequency]} · since ${formatDate(rule.startDate)}`
+        if (isEditMode) return 'One-time'
+        return frequency ? FREQUENCY_LABEL[frequency] : 'One-time'
     }
   }
 
@@ -171,6 +196,9 @@ export function AddExpenseModal({
         return !!note.trim()
       case 'remarks':
         return !!remarks.trim()
+      case 'recurring':
+        // "One-time" is as much of an answer as "Monthly", so this row never greys out.
+        return true
     }
   }
 
@@ -186,25 +214,68 @@ export function AddExpenseModal({
     setActiveField(FIELDS[activeIndex + 1].key)
   }
 
+  // Explicit nulls clear the stored foreign fields when an entry is edited back to the
+  // base currency; the create path spreads them in only when they apply.
+  const foreignUpdate = {
+    currency: isForeign ? currency : null,
+    originalAmount: isForeign ? amount : null,
+    rate: isForeign ? rate! : null,
+  }
+
+  const expenseUpdate = (): UpdateExpenseInput => ({
+    date,
+    amount: baseAmount,
+    type,
+    category,
+    note,
+    remarks,
+    baseCurrency,
+    ...foreignUpdate,
+  })
+
+  /** The form's values as a schedule. Frequency and start date belong to the rule. */
+  const ruleInput = (): RecurringRuleInput => ({
+    type,
+    frequency: frequency ?? rule!.frequency,
+    startDate: rule?.startDate ?? date,
+    amount: baseAmount,
+    category,
+    note,
+    remarks,
+    baseCurrency,
+    ...foreignUpdate,
+  })
+
+  /**
+   * Has anything the *schedule* owns changed? `date` is deliberately excluded: moving
+   * one month's payment a few days is a fact about that payment, never about the rule,
+   * so it goes through without a prompt.
+   */
+  const templateChanged =
+    !!expense &&
+    (baseAmount !== expense.amount ||
+      category !== expense.category ||
+      note !== expense.note ||
+      remarks !== (expense.remarks ?? '') ||
+      (isForeign ? currency : null) !== (expense.currency ?? null))
+
   const handleSubmit = async () => {
     if (!canSave) return
+
+    // Editing a generated row can mean three different things — ask before writing.
+    if (isEditMode && rule && templateChanged) {
+      setScopeOpen(true)
+      return
+    }
+
     setIsSubmitting(true)
     try {
       if (isEditMode && expense && onUpdate) {
-        await onUpdate(expense.id, expense.date, {
-          date,
-          amount: baseAmount,
-          type,
-          category,
-          note,
-          remarks,
-          baseCurrency,
-          // Explicit nulls clear the stored foreign fields when an expense is
-          // edited back to the base currency.
-          currency: isForeign ? currency : null,
-          originalAmount: isForeign ? amount : null,
-          rate: isForeign ? rate! : null,
-        })
+        await onUpdate(expense.id, expense.date, expenseUpdate())
+      } else if (frequency) {
+        // The server creates the rule and, when the start date has already arrived,
+        // the first transaction along with it.
+        await createRule(ruleInput())
       } else {
         await onSubmit({
           date,
@@ -217,6 +288,37 @@ export function AddExpenseModal({
           ...(isForeign && { currency, originalAmount: amount, rate: rate! }),
         })
       }
+      onClose()
+    } catch (err) {
+      console.error(`Failed to save ${type}:`, err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const applyScope = async (scope: EditScope) => {
+    if (!expense || !rule) return
+
+    setIsSubmitting(true)
+    try {
+      if (scope === 'one') {
+        await onUpdate?.(expense.id, expense.date, expenseUpdate())
+      } else {
+        await updateRule({
+          id: rule.id,
+          input: ruleInput(),
+          propagate: scope,
+          // "Future" opens at this occurrence, not at today — editing a payment dated
+          // next month should not leave that same payment behind.
+          from: expense.occurrenceDate ?? expense.date,
+        })
+        // The rule rewrote this row along with its siblings, but rules never carry a
+        // date, so a date change is applied to this one occurrence afterwards.
+        if (date !== expense.date) {
+          await onUpdate?.(expense.id, expense.date, { date })
+        }
+      }
+      setScopeOpen(false)
       onClose()
     } catch (err) {
       console.error(`Failed to save ${type}:`, err)
@@ -249,10 +351,13 @@ export function AddExpenseModal({
       </div>
 
       {/* Live in edit mode too — flipping the direction of an existing entry is just a
-          field update, since the sort key doesn't encode the type. */}
-      <div className="px-4 py-3 border-b border-zinc-800">
-        <TypeToggle value={type} onChange={selectType} />
-      </div>
+          field update, since the sort key doesn't encode the type. The exception is a
+          generated row: direction belongs to its rule, and is edited from settings. */}
+      {!rule && (
+        <div className="px-4 py-3 border-b border-zinc-800">
+          <TypeToggle value={type} onChange={selectType} />
+        </div>
+      )}
 
       {/* Fields — one full-width row each, click to edit */}
       <div className="flex-1 overflow-y-auto">
@@ -349,6 +454,28 @@ export function AddExpenseModal({
             rows={5}
           />
         )}
+        {activeField === 'recurring' &&
+          (isEditMode ? (
+            // The schedule is a property of the rule, not of any one occurrence, so it
+            // is read-only here and edited from Settings › Recurring Items.
+            <p className="px-1 py-2 text-xs text-zinc-500">
+              {rule
+                ? `Repeats ${FREQUENCY_LABEL[rule.frequency].toLowerCase()} since ${formatDate(
+                    rule.startDate
+                  )}. Change the schedule in Settings › Recurring Items.`
+                : 'This entry is one-time. Recurring items are created from Settings › Recurring Items.'}
+            </p>
+          ) : (
+            <>
+              <FrequencyPicker value={frequency} onChange={setFrequency} type={type} />
+              {frequency && (
+                <p className="mt-1 px-1 text-xs text-zinc-500">
+                  Repeats {FREQUENCY_LABEL[frequency].toLowerCase()} from {formatDate(date)}. Each
+                  one is added automatically when it comes due.
+                </p>
+              )}
+            </>
+          ))}
 
         <button
           onClick={confirmField}
@@ -364,6 +491,34 @@ export function AddExpenseModal({
             : 'Confirm'}
         </button>
       </div>
+
+      <ChoiceDialog
+        isOpen={scopeOpen}
+        title={`Change this ${NOUN[type].toLowerCase()}?`}
+        message={
+          rule
+            ? `It repeats ${FREQUENCY_LABEL[
+                rule.frequency
+              ].toLowerCase()}. Choose how far this change should reach.`
+            : undefined
+        }
+        choices={[
+          { key: 'one', label: 'Only this one', description: 'Leaves the schedule untouched' },
+          {
+            key: 'future',
+            label: 'This and all future',
+            description: 'Updates the schedule from this date onwards',
+          },
+          {
+            key: 'all',
+            label: 'All, past and future',
+            description: 'Rewrites every entry this schedule has created',
+          },
+        ]}
+        isBusy={isSubmitting}
+        onSelect={(scope: EditScope) => applyScope(scope)}
+        onCancel={() => setScopeOpen(false)}
+      />
     </div>
   )
 }

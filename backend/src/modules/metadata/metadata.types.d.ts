@@ -1,3 +1,5 @@
+import type { RecurringRule } from '../recurring/recurring.types.d.js'
+
 export interface Category {
   name: string
   subcategories: string[]
@@ -11,6 +13,11 @@ export interface ExpenseMetadata {
   baseCurrency: string
   /** Additional currencies the user can spend in. Never includes baseCurrency. */
   currencies: string[]
+  /**
+   * Subscription / salary schedules. Unlike `incomeCategories`, absent and `[]` mean the
+   * same thing — there is nothing to seed, so a plain `?? []` read default is correct.
+   */
+  recurring: RecurringRule[]
   updatedAt: string
 }
 
@@ -25,4 +32,5 @@ export interface MetadataPatch {
   incomeCategories?: Category[]
   baseCurrency?: string
   currencies?: string[]
+  recurring?: RecurringRule[]
 }

@@ -1,6 +1,7 @@
 import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient, TABLE_NAME } from '../../config/db.js'
 import type { Category, ExpenseMetadata, MetadataPatch } from './metadata.types.d.js'
+import type { RecurringRule } from '../recurring/recurring.types.d.js'
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { name: '🍜 Food', subcategories: [] },
@@ -41,6 +42,7 @@ const toMetadata = (item: Record<string, unknown>): ExpenseMetadata => ({
     : item.incomeCategories) as Category[],
   baseCurrency: (item.baseCurrency ?? DEFAULT_BASE_CURRENCY) as string,
   currencies: (item.currencies ?? []) as string[],
+  recurring: (item.recurring ?? []) as RecurringRule[],
   updatedAt: (item.updatedAt ?? '') as string,
 })
 
