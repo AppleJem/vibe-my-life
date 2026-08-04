@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { authApi } from '../../../services/api'
 
 export const Route = createFileRoute('/_authenticated/settings/')({
@@ -7,9 +8,12 @@ export const Route = createFileRoute('/_authenticated/settings/')({
 
 function SettingsPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const handleLogout = () => {
     authApi.logout()
+    // Drop cached expenses so the next sign-in on this device starts clean.
+    queryClient.clear()
     navigate({ to: '/login' })
   }
 

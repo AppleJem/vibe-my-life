@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCategories } from '../../../contexts/MetadataContext'
+import { expenseKeys } from '../../../hooks/useExpenses'
 import {
   formatCategory,
   validateCategoryName,
@@ -40,6 +42,7 @@ function toDraft(categories: Category[]): DraftCategory[] {
 
 function ConfigureCategoriesPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { categories, loading, saveCategories } = useCategories()
 
   const [draft, setDraft] = useState<DraftCategory[]>(() => toDraft(categories))
@@ -155,6 +158,11 @@ function ConfigureCategoriesPage() {
     setSaveError(null)
     try {
       await saveCategories(next, renames)
+      // The backend rewrites renamed categories across every month, so any
+      // cached expense list is now out of date. Deletions leave expenses alone.
+      if (renames.length > 0) {
+        await queryClient.invalidateQueries({ queryKey: expenseKeys.all })
+      }
       navigate({ to: '/settings' })
     } catch (err) {
       console.error(err)

@@ -1,55 +1,77 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { expenseApi } from '../services/api'
-import type { Expense, UpdateExpenseInput } from '../types/expense'
+import type { CreateExpenseInput, UpdateExpenseInput } from '../types/expense'
+
+export const expenseKeys = {
+  all: ['expenses'] as const,
+  month: (yearMonth: string) => ['expenses', yearMonth] as const,
+}
+
+/** `2026-08-04` -> `2026-08`. Expenses are partitioned by month server-side. */
+const monthOf = (date: string) => date.slice(0, 7)
 
 export function useExpenses(yearMonth: string) {
-  const [expenses, setExpenses] = useState<Expense[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
 
-  const fetchExpenses = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: expenseKeys.month(yearMonth),
+    queryFn: () => expenseApi.getExpenses(yearMonth),
+  })
 
-    try {
-      const data = await expenseApi.getExpenses(yearMonth)
-      setExpenses(data)
-    } catch (err) {
-      setError('Failed to load expenses')
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }, [yearMonth])
+  // Awaited by the mutations below so mutateAsync only resolves once the list
+  // is correct — callers can keep their pending UI up until then.
+  const invalidateMonths = useCallback(
+    (months: string[]) =>
+      Promise.all(
+        [...new Set(months)].map((month) =>
+          queryClient.invalidateQueries({ queryKey: expenseKeys.month(month) })
+        )
+      ),
+    [queryClient]
+  )
 
-  useEffect(() => {
-    fetchExpenses()
-  }, [fetchExpenses])
+  const createMutation = useMutation({
+    mutationFn: (input: CreateExpenseInput) => expenseApi.createExpense(input),
+    // The new expense may be dated outside the month on screen.
+    onSuccess: (expense) => invalidateMonths([monthOf(expense.date)]),
+  })
 
-  const addExpense = async (input: { date: string; amount: number; category: string; note?: string }) => {
-    const expense = await expenseApi.createExpense(input)
-    setExpenses((prev) => [...prev, expense].sort((a, b) => a.date.localeCompare(b.date)))
-    return expense
-  }
+  const updateMutation = useMutation({
+    mutationFn: ({ id, date, updates }: { id: string; date: string; updates: UpdateExpenseInput }) =>
+      expenseApi.updateExpense(id, date, updates),
+    // Editing the date moves the expense between months, so both are affected.
+    onSuccess: (expense, { date }) => invalidateMonths([monthOf(date), monthOf(expense.date)]),
+  })
 
-  const updateExpense = async (id: string, date: string, updates: UpdateExpenseInput) => {
-    const updated = await expenseApi.updateExpense(id, date, updates)
-    setExpenses((prev) =>
-      prev.map((e) => (e.id === id ? updated : e)).sort((a, b) => a.date.localeCompare(b.date))
-    )
-    return updated
-  }
+  const deleteMutation = useMutation({
+    mutationFn: ({ id, date }: { id: string; date: string }) => expenseApi.deleteExpense(id, date),
+    onSuccess: (_result, { date }) => invalidateMonths([monthOf(date)]),
+  })
 
-  const deleteExpense = async (id: string, date: string) => {
-    await expenseApi.deleteExpense(id, date)
-    setExpenses((prev) => prev.filter((e) => e.id !== id))
-  }
+  const addExpense = useCallback(
+    (input: CreateExpenseInput) => createMutation.mutateAsync(input),
+    [createMutation.mutateAsync]
+  )
+
+  const updateExpense = useCallback(
+    (id: string, date: string, updates: UpdateExpenseInput) =>
+      updateMutation.mutateAsync({ id, date, updates }),
+    [updateMutation.mutateAsync]
+  )
+
+  const deleteExpense = useCallback(
+    async (id: string, date: string) => {
+      await deleteMutation.mutateAsync({ id, date })
+    },
+    [deleteMutation.mutateAsync]
+  )
 
   return {
-    expenses,
-    loading,
-    error,
-    refetch: fetchExpenses,
+    expenses: data ?? [],
+    loading: isPending,
+    error: error ? 'Failed to load expenses' : null,
+    refetch,
     addExpense,
     updateExpense,
     deleteExpense,
