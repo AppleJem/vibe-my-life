@@ -28,3 +28,4 @@ pnpm-debug.log*
 
 # TanStack Router generated
 routeTree.gen.ts
+.tanstack/

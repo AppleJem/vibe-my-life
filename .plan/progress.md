@@ -92,3 +92,22 @@
 - [x] Route all five hardcoded `¥`/`$` sites through `formatAmount`
 - [x] Two-line display in `ExpenseItem` (base amount, foreign amount below)
 - [ ] Walk the UI flows manually (settings page, foreign entry, edit, offline)
+
+## Phase 11: Import backup
+- [x] Add `exceljs` + `multer` to the backend
+- [x] Create `import/import.parser.ts` — pure Buffer → rows, headers resolved by name
+- [x] Preserve the time-of-day the source file hides behind a `dd/MM/yyyy` cell format
+- [x] Skip income and transfer rows; drop the two `Accounts` columns
+- [x] Join `Note` + `Description` so neither is lost
+- [x] Keep zero-amount rows (refunds, vouchers) rather than treating them as invalid
+- [x] Add `expenseModel.createMany` — `BatchWriteCommand`, 25/chunk, retries `UnprocessedItems`
+- [x] Add `ImportExpenseInput` so an imported row keeps its original `createdAt`
+- [x] Add `POST /api/import/analyze` — preview + proposed category mapping, writes nothing
+- [x] Add `POST /api/import/commit` — re-parses the file and applies the confirmed mapping
+- [x] Emoji-insensitive category suggestions ("🚖 Transport" → the existing "🚗 Transport")
+- [x] Skip duplicates on `date + amount + note` so re-importing is a no-op
+- [x] Create `routes/_authenticated/settings/import.tsx` — pick → review/map → result
+- [x] Add `refreshMetadata` to `MetadataContext` so imported categories appear immediately
+- [x] Add "Import backup" row to the settings page
+- [x] `backend/scripts/check-import.ts` — parser cross-check against a real export
+- [ ] Run a real import end-to-end against the live table

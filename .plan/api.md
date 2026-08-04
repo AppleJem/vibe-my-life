@@ -253,6 +253,103 @@ categories and vice versa.
 
 ---
 
+## Import Endpoints
+
+Restores expenses from a Money Manager-style `.xlsx` export. Two phases: `analyze`
+previews and proposes a category mapping, `commit` writes. Both take
+`multipart/form-data` with the file in a `file` field.
+
+The file is uploaded to **both** endpoints. That is deliberate — the server stays the
+only thing that interprets the spreadsheet, and no import state has to be held between
+the two calls.
+
+### What the source format maps to
+
+| Source column | Becomes |
+|---|---|
+| `Period` | `date` (read in **UTC**) and `createdAt` (the full timestamp) |
+| `Accounts` (×2) | dropped — no account concept; the trailing one duplicates the base amount |
+| `Category` + `Subcategory` | `category`, as `Parent` or `Parent#Sub`, via the confirmed mapping |
+| `Note` + `Description` | `note`, joined with ` — ` when both are present |
+| `<BASE>` (e.g. `SGD`) | `amount`, rounded to 2dp. The header names the file's base currency |
+| `Amount` + `Currency` | `originalAmount` + `currency`, with `rate = originalAmount / amount` |
+| `Income/Expense` | filter — only `Exp.` rows are imported |
+
+`Period` cells are formatted `dd/MM/yyyy` but hold a real time fraction, so the
+time-of-day survives in `createdAt`. Income rows, transfers and account names have no
+home in this schema and are skipped or dropped, each with its own count in the response.
+Zero amounts are **kept** — in these exports they are deliberate records of a refund, a
+voucher, or something a friend paid for.
+
+---
+
+### POST /api/import/analyze
+
+**Auth required**: Yes · **Body**: `multipart/form-data`, field `file`
+
+Parses the upload and reports what would happen. **Writes nothing.**
+
+```json
+{
+  "baseCurrency": "SGD",
+  "totals": { "rows": 450, "importable": 425, "skippedIncome": 25, "skippedTransfer": 0, "skippedInvalid": 0 },
+  "zeroAmountRows": 3,
+  "dateRange": { "from": "2025-12-31", "to": "2027-01-06" },
+  "currencies": ["SGD", "CNY", "MYR", "USD"],
+  "accountsDropped": ["MariBank credit card", "POSB Deposit acc", "Cash"],
+  "duplicatesFound": 0,
+  "mappings": [
+    {
+      "sourceCategory": "🚖 Transport", "sourceSubcategory": null,
+      "parent": "🚗 Transport", "sub": null,
+      "count": 9, "parentIsNew": false, "subIsNew": false
+    }
+  ],
+  "warnings": []
+}
+```
+
+`mappings` holds one entry per distinct (Category, Subcategory) pair. `parent`/`sub` are
+a **suggestion**: existing categories are matched with emoji, spacing and case ignored,
+so `🚖 Transport` finds the existing `🚗 Transport` instead of creating a near-duplicate.
+Anything unmatched is proposed as new (`parentIsNew`/`subIsNew`) and the user confirms or
+overrides every row before committing.
+
+**Error response** (400): `{ "error": "..." }` — unreadable file, or missing a required
+column (`Period`, `Category`, `Income/Expense`, `Amount`, `Currency`, and one column whose
+header is a bare 3-letter currency code).
+
+---
+
+### POST /api/import/commit
+
+**Auth required**: Yes · **Body**: `multipart/form-data`, field `file` + field `mapping`
+
+`mapping` is a JSON string: `{ "mappings": [{ sourceCategory, sourceSubcategory, parent, sub }] }`.
+Every pair present in the file must be covered, or the request is rejected 400 without
+writing anything.
+
+Categories the mapping invents are appended to the user's metadata (via the same partial
+`patch` the categories page uses) **before** the expenses are written, so no imported
+expense ever points at a category missing from Settings.
+
+Rows matching an existing expense on `date + amount + note` are skipped, which also
+covers duplicates inside the file itself — so re-running an import is a no-op.
+
+**Success response** (200):
+```json
+{
+  "imported": 425,
+  "skippedIncome": 25,
+  "skippedTransfer": 0,
+  "skippedInvalid": 0,
+  "skippedDuplicate": 0,
+  "categoriesCreated": ["Gaming", "👬🏻 Social Life", "⚽ Sports › Equipment"]
+}
+```
+
+---
+
 ## Error Format
 
 All errors follow this structure:

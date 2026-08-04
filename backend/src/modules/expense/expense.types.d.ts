@@ -27,6 +27,15 @@ export interface CreateExpenseInput {
   rate?: number
 }
 
+/**
+ * A create that may carry its own `createdAt`. Only the importer uses this — a
+ * backup row's original timestamp is the only record of its time-of-day, which the
+ * source file stores but hides behind a date-only cell format.
+ */
+export interface ImportExpenseInput extends CreateExpenseInput {
+  createdAt?: string
+}
+
 export interface UpdateExpenseInput {
   date?: string
   amount?: number

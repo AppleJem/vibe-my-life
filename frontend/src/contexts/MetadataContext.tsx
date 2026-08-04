@@ -11,6 +11,8 @@ interface CategoriesValue {
   loading: boolean
   error: string | null
   saveCategories: (categories: Category[], renames: CategoryRename[]) => Promise<void>
+  /** Re-reads settings from the server — used after an import creates categories. */
+  refreshMetadata: () => Promise<void>
 }
 
 interface CurrencyValue {
@@ -120,6 +122,13 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const refreshMetadata = useCallback(async () => {
+    const metadata = await metadataApi.getMetadata()
+    setCategories(metadata.categories)
+    setBaseCurrency(metadata.baseCurrency)
+    setExtraCurrencies(metadata.currencies)
+  }, [])
+
   const saveCategories = useCallback(async (next: Category[], renames: CategoryRename[]) => {
     const metadata = await metadataApi.saveCategories(next, renames)
     setCategories(metadata.categories)
@@ -138,6 +147,7 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
         loading,
         error,
         saveCategories,
+        refreshMetadata,
         baseCurrency,
         currencies,
         rates,

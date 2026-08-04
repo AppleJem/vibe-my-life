@@ -77,6 +77,67 @@ export const expenseApi = {
   },
 }
 
+/** Where one (category, subcategory) pair from a backup file should land. */
+export interface CategoryMapping {
+  sourceCategory: string
+  sourceSubcategory: string | null
+  parent: string
+  sub: string | null
+}
+
+export interface MappingSuggestion extends CategoryMapping {
+  count: number
+  parentIsNew: boolean
+  subIsNew: boolean
+}
+
+export interface ImportPreview {
+  baseCurrency: string
+  totals: {
+    rows: number
+    importable: number
+    skippedIncome: number
+    skippedTransfer: number
+    skippedInvalid: number
+  }
+  zeroAmountRows: number
+  dateRange: { from: string; to: string } | null
+  currencies: string[]
+  accountsDropped: string[]
+  duplicatesFound: number
+  mappings: MappingSuggestion[]
+  warnings: string[]
+}
+
+export interface ImportResult {
+  imported: number
+  skippedIncome: number
+  skippedTransfer: number
+  skippedInvalid: number
+  skippedDuplicate: number
+  categoriesCreated: string[]
+}
+
+export const importApi = {
+  /** Parses a backup and returns what would happen. Writes nothing. */
+  async analyze(file: File): Promise<ImportPreview> {
+    const form = new FormData()
+    form.append('file', file)
+    // No explicit Content-Type — the browser sets it with the multipart boundary.
+    const { data } = await api.post('/import/analyze', form)
+    return data
+  },
+
+  /** Sends the file a second time so the server, not the client, does the parsing. */
+  async commit(file: File, mappings: CategoryMapping[]): Promise<ImportResult> {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('mapping', JSON.stringify({ mappings }))
+    const { data } = await api.post('/import/commit', form)
+    return data
+  },
+}
+
 export const metadataApi = {
   async getMetadata(): Promise<ExpenseMetadata> {
     const { data } = await api.get('/metadata')

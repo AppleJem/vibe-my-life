@@ -48,6 +48,12 @@ snapshot is what makes a proper migration possible if it's ever wanted.
 Writes go through `metadataModel.patch`, which `SET`s only the supplied attributes — so the
 categories page and the currency page can't overwrite each other's slice.
 
+Imported expenses are ordinary expense items — the importer adds no attributes. The one
+difference is that `createdAt` carries the timestamp from the backup file rather than the
+time of the write, which is what preserves within-day ordering for restored history.
+Bulk inserts go through `expenseModel.createMany` (`BatchWriteCommand`, 25 items per call,
+retrying `UnprocessedItems`).
+
 ## Access Patterns
 
 ### Get expenses for a month

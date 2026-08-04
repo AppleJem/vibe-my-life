@@ -1,7 +1,12 @@
-import { PutCommand, QueryCommand, GetCommand, DeleteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { PutCommand, QueryCommand, GetCommand, DeleteCommand, UpdateCommand, BatchWriteCommand } from '@aws-sdk/lib-dynamodb'
 import { v4 as uuidv4 } from 'uuid'
 import { docClient, TABLE_NAME } from '../../config/db.js'
-import type { Expense, CreateExpenseInput, UpdateExpenseInput } from './expense.types.d.js'
+import type { Expense, CreateExpenseInput, ImportExpenseInput, UpdateExpenseInput } from './expense.types.d.js'
+
+/** DynamoDB's hard cap on items per BatchWriteItem call. */
+const BATCH_SIZE = 25
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export const expenseModel = {
   async create(userId: string, input: CreateExpenseInput): Promise<Expense> {
@@ -33,6 +38,67 @@ export const expenseModel = {
     }))
 
     return expense
+  },
+
+  /**
+   * Bulk-inserts expenses via BatchWriteItem, 25 at a time. Used by the backup
+   * importer, where several hundred rows land at once and sequential puts would be
+   * both slow and prone to leaving a half-written import behind.
+   *
+   * Unlike `create`, each input may supply its own `createdAt` so an imported row
+   * keeps the timestamp it had in the source file.
+   *
+   * Returns the expenses written. Throws if a chunk still has unprocessed items
+   * after the retries — the caller reports a partial import rather than claiming
+   * success.
+   */
+  async createMany(userId: string, inputs: ImportExpenseInput[]): Promise<Expense[]> {
+    const now = new Date().toISOString()
+
+    const expenses: Expense[] = inputs.map((input) => ({
+      id: uuidv4(),
+      date: input.date,
+      amount: input.amount,
+      category: input.category,
+      note: input.note ?? '',
+      createdAt: input.createdAt ?? now,
+      // Same conditional spreads as `create` — DynamoDB rejects explicit `undefined`,
+      // and an absent `currency` is what marks a row as base-currency.
+      ...(input.baseCurrency !== undefined && { baseCurrency: input.baseCurrency }),
+      ...(input.currency !== undefined && { currency: input.currency }),
+      ...(input.originalAmount !== undefined && { originalAmount: input.originalAmount }),
+      ...(input.rate !== undefined && { rate: input.rate }),
+    }))
+
+    for (let i = 0; i < expenses.length; i += BATCH_SIZE) {
+      let unprocessed = expenses.slice(i, i + BATCH_SIZE).map((expense) => ({
+        PutRequest: {
+          Item: {
+            PK: `USER#${userId}`,
+            SK: `EXPENSE#${expense.date}#${expense.id}`,
+            ...expense,
+          },
+        },
+      }))
+
+      // Throughput throttling comes back as UnprocessedItems rather than an error,
+      // so retry those with exponential backoff before giving up.
+      for (let attempt = 0; unprocessed.length > 0 && attempt < 5; attempt++) {
+        if (attempt > 0) await sleep(2 ** attempt * 50)
+
+        const result = await docClient.send(new BatchWriteCommand({
+          RequestItems: { [TABLE_NAME]: unprocessed },
+        }))
+
+        unprocessed = (result.UnprocessedItems?.[TABLE_NAME] ?? []) as typeof unprocessed
+      }
+
+      if (unprocessed.length > 0) {
+        throw new Error(`Failed to write ${unprocessed.length} expenses after retries`)
+      }
+    }
+
+    return expenses
   },
 
   async getByMonth(userId: string, yearMonth: string): Promise<Expense[]> {
