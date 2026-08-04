@@ -23,7 +23,10 @@ app.use(cors({
       'http://localhost:3000',
     ]
     
-    if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+    // Allow Railway domains (*.up.railway.app)
+    const isRailwayDomain = origin.endsWith('.up.railway.app')
+    
+    if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:') || isRailwayDomain) {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'))
