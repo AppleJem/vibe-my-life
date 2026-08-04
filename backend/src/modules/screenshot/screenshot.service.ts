@@ -1,3 +1,5 @@
+import { llmClient, type LLMProviderName, type LLMMessage } from '../llm/index.js'
+
 interface ParsedExpenseItem {
   date: string
   amount: number
@@ -62,7 +64,7 @@ Example response:
 
 function validateAndCleanParsedItems(items: any[]): ParsedExpenseItem[] {
   const today = new Date().toISOString().split('T')[0]
-  
+
   return items
     .filter((item) => {
       return (
@@ -75,28 +77,34 @@ function validateAndCleanParsedItems(items: any[]): ParsedExpenseItem[] {
       )
     })
     .map((item) => ({
-      date: typeof item.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.date)
-        ? item.date
-        : today,
-      amount: Math.round(item.amount * 100) / 100, // Round to 2 decimal places
+      date:
+        typeof item.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.date)
+          ? item.date
+          : today,
+      amount: Math.round(item.amount * 100) / 100,
       type: item.type as 'expense' | 'income',
-      category: VALID_CATEGORIES.includes(item.category) || VALID_INCOME_CATEGORIES.includes(item.category)
-        ? item.category
-        : '📦 Other',
+      category:
+        VALID_CATEGORIES.includes(item.category) ||
+        VALID_INCOME_CATEGORIES.includes(item.category)
+          ? item.category
+          : '📦 Other',
       note: typeof item.note === 'string' ? item.note.slice(0, 200) : '',
     }))
 }
 
 export const screenshotService = {
-  async parseScreenshots(images: Buffer[]): Promise<ParsedExpenseItem[]> {
-    const apiKey = process.env.MIMO_API_KEY
-    if (!apiKey || apiKey === 'your-mimo-api-key-here') {
-      throw new Error('MIMO_API_KEY is not configured')
-    }
-
+  /**
+   * Parse screenshots into expense items using the LLM client.
+   * @param images - Array of image buffers
+   * @param provider - Optional: specify which LLM provider to use ('mimo' or 'gemini')
+   */
+  async parseScreenshots(
+    images: Buffer[],
+    provider?: LLMProviderName
+  ): Promise<ParsedExpenseItem[]> {
     // Build messages with all images
-    const content: any[] = []
-    
+    const content: LLMMessage['content'] = []
+
     for (const imageBuffer of images) {
       const base64 = imageBuffer.toString('base64')
       content.push({
@@ -112,40 +120,27 @@ export const screenshotService = {
       text: buildPrompt(VALID_CATEGORIES, VALID_INCOME_CATEGORIES),
     })
 
-    const response = await fetch('https://api.xiaomimimo.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'api-key': apiKey,
-        'Content-Type': 'application/json',
+    const messages: LLMMessage[] = [
+      {
+        role: 'system',
+        content:
+          'You are a helpful assistant that extracts expense information from images. Always respond with valid JSON only.',
       },
-      body: JSON.stringify({
-        model: 'mimo-v2.5',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful assistant that extracts expense information from images. Always respond with valid JSON only.',
-          },
-          {
-            role: 'user',
-            content: content,
-          },
-        ],
-        max_tokens: 4096,
-      }),
+      {
+        role: 'user',
+        content,
+      },
+    ]
+
+    // Use the specified provider, or let the client use its default
+    const response = await llmClient.complete({
+      messages,
+      maxTokens: 4096,
+      provider,
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Mimo API error:', errorText)
-      throw new Error(`Mimo API error: ${response.status}`)
-    }
-
-    const data = await response.json()
-    const assistantMessage = data.choices?.[0]?.message?.content
-
-    if (!assistantMessage) {
-      throw new Error('No response from Mimo API')
-    }
+    const assistantMessage = response.content
+    console.log(`LLM response from ${provider || 'default'}:`, response.model)
 
     // Parse JSON from the response (handle potential markdown code blocks)
     let jsonStr = assistantMessage.trim()

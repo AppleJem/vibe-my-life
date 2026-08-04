@@ -33,7 +33,9 @@
 ## Status: ✅ Implementation Complete
 
 ### Next Steps
-1. **Configure MIMO_API_KEY**: Add your Mimo API key to `backend/.env`
+1. **Configure API Keys**: Add your keys to `backend/.env`
+   - `GEMINI_API_KEY` - Get from https://aistudio.google.com/apikey
+   - `MIMO_API_KEY` - Optional fallback
 2. **Test the flow**:
    - Start the backend: `cd backend && npm run dev`
    - Start the frontend: `cd frontend && npm run dev`
@@ -47,27 +49,58 @@
 - Images are processed in memory and never stored on disk
 - Max 5 images per request, 10MB each
 - Cancel button aborts the in-progress request
+- **Default LLM**: Gemini (faster), with Mimo as fallback
 
 ---
 
-## Current Task: Phase 4 - Integration & Testing
+## LLM Client Architecture
 
-### Notes
-- Mimo-v2.5 API endpoint: https://api.xiaomimimo.com/v1/chat/completions
-- Model name: `mimo-v2.5`
-- Uses OpenAI-compatible API format
-- Images sent as base64 encoded strings
+The LLM client is abstracted behind a clean interface that makes switching models easy:
 
-### Files Created/Modified
-**Backend:**
-- `backend/src/modules/screenshot/screenshot.service.ts` - LLM parsing service
+```
+backend/src/modules/llm/
+├── llm.types.ts          # Interfaces (LLMProvider, LLMMessage, etc.)
+├── llm.client.ts         # Singleton client with provider management
+├── index.ts              # Public exports
+└── providers/
+    ├── gemini.provider.ts  # Google Gemini (default)
+    └── mimo.provider.ts    # Xiaomi Mimo (fallback)
+```
+
+### Usage Example
+```typescript
+import { llmClient } from '../llm/index.js'
+
+// Use default provider (Gemini)
+const response = await llmClient.complete({ messages })
+
+// Use specific provider
+const response = await llmClient.complete({ messages, provider: 'mimo' })
+
+// Check available providers
+console.log(llmClient.getAvailableProviders()) // ['gemini', 'mimo']
+```
+
+---
+
+## Files Created/Modified
+
+**Backend - LLM Client:**
+- `backend/src/modules/llm/llm.types.ts` - Type definitions
+- `backend/src/modules/llm/llm.client.ts` - Client singleton with provider management
+- `backend/src/modules/llm/index.ts` - Public exports
+- `backend/src/modules/llm/providers/gemini.provider.ts` - Gemini implementation
+- `backend/src/modules/llm/providers/mimo.provider.ts` - Mimo implementation
+
+**Backend - Screenshot Feature:**
+- `backend/src/modules/screenshot/screenshot.service.ts` - Updated to use LLM client
 - `backend/src/modules/screenshot/screenshot.controller.ts` - Request handler
 - `backend/src/modules/screenshot/screenshot.routes.ts` - Routes with multer
 - `backend/src/modules/expense/expense.controller.ts` - Added batchCreateExpenses
 - `backend/src/modules/expense/expense.routes.ts` - Added /batch route
 - `backend/src/server.ts` - Registered screenshot routes
-- `backend/.env` - Added MIMO_API_KEY
-- `backend/.env.example` - Added MIMO_API_KEY
+- `backend/.env` - Added GEMINI_API_KEY
+- `backend/.env.example` - Added GEMINI_API_KEY
 
 **Frontend:**
 - `frontend/src/components/ExpenseTracker/ImagePickerButton.tsx` - Long press FAB
