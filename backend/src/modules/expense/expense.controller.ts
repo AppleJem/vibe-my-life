@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { expenseModel } from './expense.model.js'
+import type { CreateExpenseInput } from './expense.types.d.js'
 
 const currencyCode = z.string().regex(/^[A-Z]{3}$/, 'Must be a 3-letter ISO currency code')
 
@@ -110,6 +111,36 @@ export const expenseController = {
     } catch (err) {
       console.error('Error deleting expense:', err)
       return res.status(500).json({ error: 'Failed to delete expense' })
+    }
+  },
+
+  async batchCreateExpenses(req: Request, res: Response) {
+    const items = req.body.items as CreateExpenseInput[]
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items array is required and must not be empty' })
+    }
+
+    // Validate each item
+    const validatedItems: CreateExpenseInput[] = []
+    for (const item of items) {
+      const parsed = createExpenseSchema.safeParse(item)
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          error: 'Invalid item in array',
+          details: parsed.error.flatten(),
+          item 
+        })
+      }
+      validatedItems.push(parsed.data)
+    }
+
+    try {
+      const expenses = await expenseModel.createMany(req.userId!, validatedItems)
+      return res.status(201).json({ expenses })
+    } catch (err) {
+      console.error('Error batch creating expenses:', err)
+      return res.status(500).json({ error: 'Failed to create expenses' })
     }
   },
 }

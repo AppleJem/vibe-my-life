@@ -237,3 +237,25 @@ export const metadataApi = {
     return data.metadata
   },
 }
+
+export interface ParsedExpenseItem {
+  date: string
+  amount: number
+  type: 'expense' | 'income'
+  category: string
+  note: string
+}
+
+export const screenshotApi = {
+  async parseScreenshots(files: File[], signal?: AbortSignal): Promise<ParsedExpenseItem[]> {
+    const form = new FormData()
+    files.forEach((file) => form.append('images', file))
+    const { data } = await api.post('/screenshot/parse', form, { signal })
+    return data.items
+  },
+
+  async batchCreateExpenses(items: CreateExpenseInput[]): Promise<Expense[]> {
+    const { data } = await api.post('/expenses/batch', { items })
+    return data.expenses
+  },
+}

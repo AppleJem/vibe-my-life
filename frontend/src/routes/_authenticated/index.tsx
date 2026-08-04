@@ -1,13 +1,16 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { useState, useCallback } from 'react'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useState, useCallback, useRef } from 'react'
 import { MonthHeader } from '../../components/ExpenseTracker/MonthHeader'
 import { ExpenseList } from '../../components/ExpenseTracker/ExpenseList'
 import { SwipeContainer } from '../../components/ExpenseTracker/SwipeContainer'
 import { AddExpenseModal } from '../../components/ExpenseTracker/AddExpenseModal/AddExpenseModal'
 import { CategoryBreakdown } from '../../components/ExpenseTracker/CategoryBreakdown/CategoryBreakdown'
 import { ViewTabs, type DashboardView } from '../../components/ExpenseTracker/ViewTabs'
+import { ImagePickerButton } from '../../components/ExpenseTracker/ImagePickerButton'
+import { ScreenshotLoadingOverlay } from '../../components/ExpenseTracker/ScreenshotLoadingOverlay'
 import { useExpenses } from '../../hooks/useExpenses'
 import { splitByType, sumOf } from '../../utils/transaction'
+import { screenshotApi } from '../../services/api'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../types/expense'
 
 export const Route = createFileRoute('/_authenticated/')({
@@ -15,6 +18,7 @@ export const Route = createFileRoute('/_authenticated/')({
 })
 
 function DashboardPage() {
+  const navigate = useNavigate()
   const [yearMonth, setYearMonth] = useState(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -22,6 +26,9 @@ function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
   const [view, setView] = useState<DashboardView>('list')
+  const [isParsingScreenshots, setIsParsingScreenshots] = useState(false)
+  const [selectedImages, setSelectedImages] = useState<File[]>([])
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const { expenses, loading, deleteExpense, addExpense, updateExpense } = useExpenses(yearMonth)
 
@@ -64,6 +71,43 @@ function DashboardPage() {
     setSelectedExpense(null)
   }
 
+  const handleImagesSelected = useCallback(async (files: File[]) => {
+    setSelectedImages(files)
+    setIsParsingScreenshots(true)
+
+    // Create an abort controller for cancellation
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    try {
+      const items = await screenshotApi.parseScreenshots(files, abortController.signal)
+      
+      // Navigate to draft page with parsed items
+      navigate({
+        to: '/expense-draft',
+        search: { items },
+      })
+    } catch (err: any) {
+      if (err.name === 'CanceledError' || err.name === 'AbortError') {
+        // User cancelled - do nothing
+        console.log('Screenshot parsing cancelled')
+      } else {
+        console.error('Failed to parse screenshots:', err)
+        alert('Failed to parse screenshots. Please try again.')
+      }
+    } finally {
+      setIsParsingScreenshots(false)
+      setSelectedImages([])
+      abortControllerRef.current = null
+    }
+  }, [navigate])
+
+  const handleCancelParsing = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+  }, [])
+
   return (
     <>
       <SwipeContainer onSwipeLeft={goToNextMonth} onSwipeRight={goToPreviousMonth}>
@@ -92,18 +136,22 @@ function DashboardPage() {
         )}
       </SwipeContainer>
 
-      {/* FAB - Add expense */}
-      <button
-        onClick={() => {
+      {/* Loading overlay for screenshot parsing */}
+      {isParsingScreenshots && (
+        <ScreenshotLoadingOverlay
+          onCancel={handleCancelParsing}
+          imageCount={selectedImages.length}
+        />
+      )}
+
+      {/* FAB - Add expense (with long press for image picker) */}
+      <ImagePickerButton
+        onImagesSelected={handleImagesSelected}
+        onStandardClick={() => {
           setSelectedExpense(null)
           setIsModalOpen(true)
         }}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-shadow"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-        </svg>
-      </button>
+      />
 
       {/* Add/Edit Expense Modal */}
       <AddExpenseModal
