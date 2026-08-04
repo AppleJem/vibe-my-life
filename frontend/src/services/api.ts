@@ -1,5 +1,16 @@
 import axios from 'axios'
 import type { Expense, CreateExpenseInput, UpdateExpenseInput } from '../types/expense'
+import type { Category } from '../constants/categories'
+
+export interface CategoryRename {
+  from: string
+  to: string
+}
+
+export interface ExpenseMetadata {
+  categories: Category[]
+  updatedAt: string
+}
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
@@ -60,5 +71,22 @@ export const expenseApi = {
 
   async deleteExpense(id: string, date: string): Promise<void> {
     await api.delete(`/expenses/${id}`, { params: { date } })
+  },
+}
+
+export const metadataApi = {
+  async getMetadata(): Promise<ExpenseMetadata> {
+    const { data } = await api.get('/metadata')
+    return data.metadata
+  },
+
+  // Renames are applied retroactively to existing expenses by the backend,
+  // across every month — deletions are deliberately not.
+  async saveCategories(
+    categories: Category[],
+    renames: CategoryRename[] = []
+  ): Promise<ExpenseMetadata> {
+    const { data } = await api.put('/metadata/categories', { categories, renames })
+    return data.metadata
   },
 }

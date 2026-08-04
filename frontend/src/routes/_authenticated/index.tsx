@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useCallback } from 'react'
-import { Layout } from '../../components/Layout'
 import { MonthHeader } from '../../components/ExpenseTracker/MonthHeader'
 import { ExpenseList } from '../../components/ExpenseTracker/ExpenseList'
 import { SwipeContainer } from '../../components/ExpenseTracker/SwipeContainer'
@@ -59,7 +58,7 @@ function DashboardPage() {
   }
 
   return (
-    <Layout>
+    <>
       <SwipeContainer onSwipeLeft={goToNextMonth} onSwipeRight={goToPreviousMonth}>
         <MonthHeader
           yearMonth={yearMonth}
@@ -97,6 +96,6 @@ function DashboardPage() {
         expense={selectedExpense}
         onUpdate={handleUpdateExpense}
       />
-    </Layout>
+    </>
   )
 }

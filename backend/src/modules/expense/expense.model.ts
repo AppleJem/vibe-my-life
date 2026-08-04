@@ -45,6 +45,59 @@ export const expenseModel = {
     return (result.Items ?? []) as Expense[]
   },
 
+  async getAll(userId: string): Promise<Expense[]> {
+    const items: Expense[] = []
+    let lastKey: Record<string, unknown> | undefined
+
+    do {
+      const result = await docClient.send(new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+        ExpressionAttributeValues: {
+          ':pk': `USER#${userId}`,
+          ':prefix': 'EXPENSE#',
+        },
+        ExclusiveStartKey: lastKey,
+      }))
+
+      items.push(...((result.Items ?? []) as Expense[]))
+      lastKey = result.LastEvaluatedKey
+    } while (lastKey)
+
+    return items
+  },
+
+  // Rewrites the category of every expense under `from`, including its subcategories
+  // ("Food" also moves "Food#Drinks"). Returns how many items were changed.
+  async renameCategory(userId: string, from: string, to: string): Promise<number> {
+    const all = await this.getAll(userId)
+    const affected = all.filter(
+      (e) => e.category === from || e.category.startsWith(`${from}#`)
+    )
+
+    const CHUNK_SIZE = 25
+    for (let i = 0; i < affected.length; i += CHUNK_SIZE) {
+      await Promise.all(
+        affected.slice(i, i + CHUNK_SIZE).map((expense) =>
+          docClient.send(new UpdateCommand({
+            TableName: TABLE_NAME,
+            Key: {
+              PK: `USER#${userId}`,
+              SK: `EXPENSE#${expense.date}#${expense.id}`,
+            },
+            UpdateExpression: 'SET #category = :category',
+            ExpressionAttributeNames: { '#category': 'category' },
+            ExpressionAttributeValues: {
+              ':category': to + expense.category.slice(from.length),
+            },
+          }))
+        )
+      )
+    }
+
+    return affected.length
+  },
+
   async getById(userId: string, date: string, expenseId: string): Promise<Expense | null> {
     const result = await docClient.send(new GetCommand({
       TableName: TABLE_NAME,

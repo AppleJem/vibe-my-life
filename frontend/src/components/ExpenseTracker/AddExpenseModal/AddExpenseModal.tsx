@@ -3,7 +3,7 @@ import { DatePicker } from './DatePicker'
 import { Calculator } from './Calculator'
 import { CategoryPicker } from './CategoryPicker'
 import { NoteInput } from './NoteInput'
-import { getCategoryByKey } from '../../../constants/categories'
+import { displayCategory } from '../../../constants/categories'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../../types/expense'
 
 interface AddExpenseModalProps {
@@ -67,10 +67,8 @@ export function AddExpenseModal({
       }
       case 'amount':
         return amount > 0 ? `¥${amount.toFixed(2)}` : '—'
-      case 'category': {
-        const cat = getCategoryByKey(category)
-        return cat ? `${cat.emoji} ${cat.label}` : '—'
-      }
+      case 'category':
+        return category ? displayCategory(category) : '—'
       case 'note':
         return note.trim() || '—'
     }

@@ -1,15 +1,6 @@
 import { useRef, useState, useCallback } from 'react'
 import type { Expense } from '../../types/expense'
-
-const CATEGORY_ICONS: Record<string, string> = {
-  food: '🍔',
-  transport: '🚌',
-  shopping: '🛍️',
-  entertainment: '🎬',
-  bills: '📄',
-  health: '💊',
-  other: '📦',
-}
+import { displayCategory } from '../../constants/categories'
 
 interface ExpenseItemProps {
   expense: Expense
@@ -80,11 +71,8 @@ export function ExpenseItem({ expense, onDelete, onClick }: ExpenseItemProps) {
         onClick={handleClick}
       >
         <div className="flex items-center gap-3">
-          <span className="text-2xl">
-            {CATEGORY_ICONS[expense.category] || '📦'}
-          </span>
           <div>
-            <p className="text-zinc-100 font-medium">{expense.category}</p>
+            <p className="text-zinc-100 font-medium">{displayCategory(expense.category)}</p>
             {expense.note && (
               <p className="text-zinc-500 text-sm">{expense.note}</p>
             )}
