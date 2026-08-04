@@ -1,10 +1,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { MonthHeader } from '../../components/ExpenseTracker/MonthHeader'
 import { ExpenseList } from '../../components/ExpenseTracker/ExpenseList'
 import { SwipeContainer } from '../../components/ExpenseTracker/SwipeContainer'
 import { AddExpenseModal } from '../../components/ExpenseTracker/AddExpenseModal/AddExpenseModal'
-import { CategoryBreakdown } from '../../components/ExpenseTracker/CategoryBreakdown/CategoryBreakdown'
 import { ViewTabs, type DashboardView } from '../../components/ExpenseTracker/ViewTabs'
 import { ImagePickerButton } from '../../components/ExpenseTracker/ImagePickerButton'
 import { ScreenshotLoadingOverlay } from '../../components/ExpenseTracker/ScreenshotLoadingOverlay'
@@ -12,6 +11,13 @@ import { useExpenses } from '../../hooks/useExpenses'
 import { splitByType, sumOf } from '../../utils/transaction'
 import { screenshotApi } from '../../services/api'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../types/expense'
+
+// Lazy-load CategoryBreakdown — it pulls in recharts (~200KB)
+const CategoryBreakdown = lazy(() =>
+  import('../../components/ExpenseTracker/CategoryBreakdown/CategoryBreakdown').then(
+    (m) => ({ default: m.CategoryBreakdown })
+  )
+)
 
 export const Route = createFileRoute('/_authenticated/')({
   component: DashboardPage,
@@ -127,12 +133,20 @@ function DashboardPage() {
             onExpenseClick={handleExpenseClick}
           />
         ) : (
-          <CategoryBreakdown
-            expenses={expenses}
-            loading={loading}
-            onDelete={deleteExpense}
-            onExpenseClick={handleExpenseClick}
-          />
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-20">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-500 border-t-pink-500" />
+              </div>
+            }
+          >
+            <CategoryBreakdown
+              expenses={expenses}
+              loading={loading}
+              onDelete={deleteExpense}
+              onExpenseClick={handleExpenseClick}
+            />
+          </Suspense>
         )}
       </SwipeContainer>
 
