@@ -39,6 +39,11 @@ export function ImagePickerButton({ onImagesSelected, onVoiceClick, onStandardCl
 
   const handlePointerDown = useCallback(() => {
     isLongPress.current = false
+
+    // While the options are open the FAB is an X — a plain tap closes them,
+    // so there is no long press to arm.
+    if (showOptions) return
+
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true
       setShowOptions(true)
@@ -47,19 +52,29 @@ export function ImagePickerButton({ onImagesSelected, onVoiceClick, onStandardCl
         navigator.vibrate(50)
       }
     }, 500) // 500ms threshold for long press
-  }, [])
+  }, [showOptions])
 
   const handlePointerUp = useCallback(() => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
     }
-    
-    if (!isLongPress.current) {
-      // Short tap - standard add expense
-      onStandardClick()
+
+    if (isLongPress.current) {
+      // This release just ended the long press that opened the options —
+      // don't let it immediately close them again.
+      return
     }
-  }, [onStandardClick])
+
+    if (showOptions) {
+      // Tapping the X dismisses the image/voice options
+      setShowOptions(false)
+      return
+    }
+
+    // Short tap - standard add expense
+    onStandardClick()
+  }, [showOptions, onStandardClick])
 
   const handlePointerLeave = useCallback(() => {
     if (longPressTimer.current) {
@@ -173,13 +188,17 @@ export function ImagePickerButton({ onImagesSelected, onVoiceClick, onStandardCl
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
         onContextMenu={(e) => e.preventDefault()}
+        aria-label={showOptions ? 'Close add options' : 'Add expense'}
         className={`no-tap-highlight touch-manipulation focus:outline-none fixed bottom-24 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-all duration-300 ease-in-out z-50 ${
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
         }`}
       >
+        {/* The plus turns into an X by rotating a quarter-turn left */}
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          className="h-6 w-6 text-white"
+          className={`h-6 w-6 text-white transition-transform duration-300 ease-in-out ${
+            showOptions ? '-rotate-45' : 'rotate-0'
+          }`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
