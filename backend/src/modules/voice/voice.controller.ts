@@ -5,7 +5,6 @@ import type { LLMProviderName } from '../llm/index.js'
 export const voiceController = {
   async parseVoiceRecording(req: Request, res: Response) {
     const file = req.file as Express.Multer.File | undefined
-    const provider = req.body.provider as LLMProviderName | undefined
 
     if (!file) {
       return res.status(400).json({ error: 'Audio file is required' })
@@ -61,7 +60,6 @@ export const voiceController = {
         file.mimetype,
         categories,
         incomeCategories,
-        provider
       )
       return res.json({ transcript, items })
     } catch (err: any) {
