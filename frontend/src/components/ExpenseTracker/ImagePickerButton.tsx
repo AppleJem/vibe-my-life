@@ -120,7 +120,7 @@ export function ImagePickerButton({ onImagesSelected, onVoiceClick, onStandardCl
           {/* Voice recorder button */}
           <button
             onClick={handleVoiceOptionClick}
-            className={`fixed bottom-64 right-6 w-14 h-14 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/25 flex items-center justify-center hover:shadow-emerald-500/40 transition-all duration-300 ease-in-out z-50 animate-in fade-in slide-in-from-bottom-2 ${
+            className={`no-tap-highlight touch-manipulation fixed bottom-64 right-6 w-14 h-14 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/25 flex items-center justify-center hover:shadow-emerald-500/40 transition-all duration-300 ease-in-out z-50 animate-in fade-in slide-in-from-bottom-2 ${
               isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
             }`}
             title="Add expense by voice"
@@ -144,7 +144,7 @@ export function ImagePickerButton({ onImagesSelected, onVoiceClick, onStandardCl
           {/* Image picker button */}
           <button
             onClick={handleImageOptionClick}
-            className={`fixed bottom-44 right-6 w-14 h-14 bg-violet-500 rounded-full shadow-lg shadow-violet-500/25 flex items-center justify-center hover:shadow-violet-500/40 transition-all duration-300 ease-in-out z-50 animate-in fade-in slide-in-from-bottom-2 ${
+            className={`no-tap-highlight touch-manipulation fixed bottom-44 right-6 w-14 h-14 bg-violet-500 rounded-full shadow-lg shadow-violet-500/25 flex items-center justify-center hover:shadow-violet-500/40 transition-all duration-300 ease-in-out z-50 animate-in fade-in slide-in-from-bottom-2 ${
               isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
             }`}
             title="Parse expenses from screenshot"
@@ -173,7 +173,7 @@ export function ImagePickerButton({ onImagesSelected, onVoiceClick, onStandardCl
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
         onContextMenu={(e) => e.preventDefault()}
-        className={`fixed bottom-24 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-all duration-300 ease-in-out z-50 ${
+        className={`no-tap-highlight touch-manipulation focus:outline-none fixed bottom-24 right-6 w-14 h-14 bg-pink-500 rounded-full shadow-lg shadow-pink-500/25 flex items-center justify-center hover:shadow-pink-500/40 transition-all duration-300 ease-in-out z-50 ${
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
         }`}
       >

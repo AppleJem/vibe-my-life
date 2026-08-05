@@ -9,3 +9,12 @@
 .animate-shake {
   animation: shake 0.5s ease-in-out;
 }
+
+/* Suppress the mobile long-press artifacts (grey/blue tap flash, selection
+   highlight, callout menu) on elements that handle long press themselves. */
+.no-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
