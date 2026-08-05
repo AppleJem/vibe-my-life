@@ -1,5 +1,5 @@
 import Groq, { toFile } from 'groq-sdk'
-import { llmClient, type LLMProviderName, type LLMMessage } from '../llm/index.js'
+import { llmClient, type LLMMessage } from '../llm/index.js'
 import { env } from '../../config/env.js'
 
 export interface VoiceCategory {

@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express'
 import { voiceService, type VoiceCategory } from './voice.service.js'
-import type { LLMProviderName } from '../llm/index.js'
 
 export const voiceController = {
   async parseVoiceRecording(req: Request, res: Response) {
