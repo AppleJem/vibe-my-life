@@ -111,6 +111,10 @@ export function ImagePickerButton({ onImagesSelected, onVoiceClick, onStandardCl
     setShowOptions(false)
   }, [])
 
+  // The options are only up when they've been summoned *and* the scroll
+  // direction hasn't tucked the whole FAB stack away.
+  const optionsShown = showOptions && isVisible
+
   return (
     <>
       {/* Hidden file input */}
@@ -123,64 +127,71 @@ export function ImagePickerButton({ onImagesSelected, onVoiceClick, onStandardCl
         onChange={handleFileChange}
       />
 
-      {/* Options popup */}
+      {/* Backdrop to close the popup */}
       {showOptions && (
-        <>
-          {/* Backdrop to close the popup */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={handleBackdropClick}
-          />
-          
-          {/* Voice recorder button */}
-          <button
-            onClick={handleVoiceOptionClick}
-            className={`no-tap-highlight touch-manipulation fixed bottom-64 right-6 w-14 h-14 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/25 flex items-center justify-center hover:shadow-emerald-500/40 transition-all duration-300 ease-in-out z-50 animate-in fade-in slide-in-from-bottom-2 ${
-              isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-            }`}
-            title="Add expense by voice"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-              />
-            </svg>
-          </button>
-
-          {/* Image picker button */}
-          <button
-            onClick={handleImageOptionClick}
-            className={`no-tap-highlight touch-manipulation fixed bottom-44 right-6 w-14 h-14 bg-violet-500 rounded-full shadow-lg shadow-violet-500/25 flex items-center justify-center hover:shadow-violet-500/40 transition-all duration-300 ease-in-out z-50 animate-in fade-in slide-in-from-bottom-2 ${
-              isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-            }`}
-            title="Parse expenses from screenshot"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-          </button>
-        </>
+        <div
+          className="fixed inset-0 z-40"
+          onClick={handleBackdropClick}
+        />
       )}
+
+      {/* The option buttons stay mounted so they can animate out as well as
+          in — unmounting them would skip the exit transition entirely. */}
+      {/* Voice recorder button */}
+      <button
+        onClick={handleVoiceOptionClick}
+        aria-hidden={!optionsShown}
+        tabIndex={optionsShown ? 0 : -1}
+        className={`no-tap-highlight touch-manipulation fixed bottom-64 right-6 w-14 h-14 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/25 flex items-center justify-center hover:shadow-emerald-500/40 transition-all duration-150 ease-out z-50 ${
+          optionsShown
+            ? 'opacity-100 translate-y-0 delay-[40ms]'
+            : 'opacity-0 translate-y-3 pointer-events-none delay-0'
+        }`}
+        title="Add expense by voice"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-6 w-6 text-white"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+          />
+        </svg>
+      </button>
+
+      {/* Image picker button */}
+      <button
+        onClick={handleImageOptionClick}
+        aria-hidden={!optionsShown}
+        tabIndex={optionsShown ? 0 : -1}
+        className={`no-tap-highlight touch-manipulation fixed bottom-44 right-6 w-14 h-14 bg-violet-500 rounded-full shadow-lg shadow-violet-500/25 flex items-center justify-center hover:shadow-violet-500/40 transition-all duration-150 ease-out z-50 ${
+          optionsShown
+            ? 'opacity-100 translate-y-0'
+            : 'opacity-0 translate-y-3 pointer-events-none'
+        }`}
+        title="Parse expenses from screenshot"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-6 w-6 text-white"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+          />
+        </svg>
+      </button>
 
       {/* Main FAB - Add expense */}
       <button
