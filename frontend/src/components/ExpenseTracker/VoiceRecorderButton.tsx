@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { blobToWav } from '../../utils/audioToWav'
+import { LiveWaveform } from './LiveWaveform'
 
 interface VoiceRecorderButtonProps {
   onRecordingComplete: (audioBlob: Blob) => void
@@ -12,12 +13,28 @@ export function VoiceRecorderButton({ onRecordingComplete, onCancel }: VoiceReco
   const [state, setState] = useState<RecordingState>('idle')
   const [duration, setDuration] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  // State, not a ref: the waveform has to re-render once the analyser exists.
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const cancelledRef = useRef(false)
+  const audioContextRef = useRef<AudioContext | null>(null)
+
+  /**
+   * Tears down the analyser graph. Kept separate from stopping the tracks because the
+   * visualiser dies at the end of recording while the stream may outlive it briefly.
+   */
+  const teardownAudioGraph = useCallback(() => {
+    setAnalyser(null)
+    if (audioContextRef.current) {
+      // A context that never started (permission denied) is already closed.
+      audioContextRef.current.close().catch(() => {})
+      audioContextRef.current = null
+    }
+  }, [])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -25,6 +42,10 @@ export function VoiceRecorderButton({ onRecordingComplete, onCancel }: VoiceReco
       if (timerRef.current) clearInterval(timerRef.current)
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop())
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {})
+        audioContextRef.current = null
       }
     }
   }, [])
@@ -36,6 +57,30 @@ export function VoiceRecorderButton({ onRecordingComplete, onCancel }: VoiceReco
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
+
+      // Tap the same stream for the visualiser. The analyser is a dead end — nothing
+      // connects on to the destination, which would loop the mic back to the speakers.
+      try {
+        const AudioContextCtor =
+          window.AudioContext ?? (window as any).webkitAudioContext
+        const audioContext: AudioContext = new AudioContextCtor()
+        audioContextRef.current = audioContext
+
+        // Safari hands back a suspended context; this call is inside the tap that
+        // opened the recorder, so the resume is allowed.
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume()
+        }
+
+        const node = audioContext.createAnalyser()
+        node.fftSize = 1024
+        node.smoothingTimeConstant = 0.6
+        audioContext.createMediaStreamSource(stream).connect(node)
+        setAnalyser(node)
+      } catch (err) {
+        // A missing or blocked AudioContext costs the animation, not the recording.
+        console.error('Waveform unavailable:', err)
+      }
 
       // Determine supported MIME type - prefer ogg for better compatibility with Groq
       const mimeTypes = ['audio/ogg;codecs=opus', 'audio/ogg', 'audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
@@ -63,6 +108,7 @@ export function VoiceRecorderButton({ onRecordingComplete, onCancel }: VoiceReco
         if (cancelledRef.current) {
           stream.getTracks().forEach((track) => track.stop())
           streamRef.current = null
+          teardownAudioGraph()
           return
         }
 
@@ -73,6 +119,7 @@ export function VoiceRecorderButton({ onRecordingComplete, onCancel }: VoiceReco
         // Stop all tracks
         stream.getTracks().forEach((track) => track.stop())
         streamRef.current = null
+        teardownAudioGraph()
 
         if (blob.size === 0) {
           setError('No audio recorded')
@@ -116,8 +163,9 @@ export function VoiceRecorderButton({ onRecordingComplete, onCancel }: VoiceReco
         setError('Failed to access microphone. Please try again.')
       }
       setState('idle')
+      teardownAudioGraph()
     }
-  }, [onRecordingComplete])
+  }, [onRecordingComplete, teardownAudioGraph])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -149,11 +197,12 @@ export function VoiceRecorderButton({ onRecordingComplete, onCancel }: VoiceReco
       streamRef.current.getTracks().forEach((track) => track.stop())
       streamRef.current = null
     }
+    teardownAudioGraph()
     setState('idle')
     setDuration(0)
     setError(null)
     onCancel()
-  }, [onCancel])
+  }, [onCancel, teardownAudioGraph])
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
@@ -161,8 +210,14 @@ export function VoiceRecorderButton({ onRecordingComplete, onCancel }: VoiceReco
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
-  // Start recording immediately when component mounts
+  // Start recording immediately when component mounts. The guard matters because
+  // `startRecording` changes identity whenever the parent's completion handler does —
+  // without it, a callback rebuilt mid-recording would open a second microphone stream
+  // and recorder on top of the live one.
+  const startedRef = useRef(false)
   useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
     startRecording()
   }, [startRecording])
 
@@ -209,22 +264,8 @@ export function VoiceRecorderButton({ onRecordingComplete, onCancel }: VoiceReco
             </p>
           </div>
 
-          {/* Waveform visualization */}
-          {state === 'recording' && (
-            <div className="flex items-center justify-center gap-1 h-12 mb-4">
-              {[...Array(20)].map((_, i) => (
-                <div
-                  key={i}
-                  className="w-1 bg-pink-500 rounded-full animate-pulse"
-                  style={{
-                    height: `${Math.random() * 100}%`,
-                    animationDelay: `${i * 50}ms`,
-                    animationDuration: '0.5s',
-                  }}
-                />
-              ))}
-            </div>
-          )}
+          {/* Waveform visualization — driven by the live mic signal */}
+          {state === 'recording' && <LiveWaveform analyser={analyser} />}
 
           {/* Error message */}
           {error && (
