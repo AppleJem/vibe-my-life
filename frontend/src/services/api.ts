@@ -307,12 +307,26 @@ export const metadataApi = {
   },
 }
 
+/**
+ * An item as it comes back from a parser (voice or screenshot), plus the currency
+ * fields the client fills in afterwards.
+ *
+ * Straight off the wire, `amount` is the figure the parser heard and `currency` — when
+ * present — says which currency that figure is in. The parser has no exchange rates, so
+ * pricing happens client-side via `priceInBase`, which moves the spoken figure into
+ * `originalAmount` and leaves `amount` in the base currency, matching how an `Expense`
+ * is stored.
+ */
 export interface ParsedExpenseItem {
   date: string
   amount: number
   type: 'expense' | 'income'
   category: string
   note: string
+  currency?: string
+  originalAmount?: number
+  rate?: number
+  baseCurrency?: string
 }
 
 export const screenshotApi = {
@@ -344,6 +358,8 @@ export const voiceApi = {
     audioBlob: Blob,
     categories: VoiceCategory[],
     incomeCategories: VoiceCategory[],
+    baseCurrency: string,
+    currencies: string[],
     signal?: AbortSignal
   ): Promise<VoiceParseResult> {
     const form = new FormData()
@@ -354,6 +370,9 @@ export const voiceApi = {
     form.append('audio', audioBlob, `recording.${ext}`)
     form.append('categories', JSON.stringify(categories))
     form.append('incomeCategories', JSON.stringify(incomeCategories))
+    // Lets the parser tell "3000 yen" from "3000" without guessing at the user's base.
+    form.append('baseCurrency', baseCurrency)
+    form.append('currencies', JSON.stringify(currencies))
     const { data } = await api.post('/voice/parse', form, { signal })
     return data
   },

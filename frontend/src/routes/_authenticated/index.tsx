@@ -10,8 +10,10 @@ import { VoiceRecorderButton } from '../../components/ExpenseTracker/VoiceRecord
 import { ScreenshotLoadingOverlay } from '../../components/ExpenseTracker/ScreenshotLoadingOverlay'
 import { useExpenses } from '../../hooks/useExpenses'
 import { splitByType, sumOf } from '../../utils/transaction'
-import { screenshotApi, voiceApi } from '../../services/api'
-import { useCategories } from '../../contexts/MetadataContext'
+import { priceInBase } from '../../utils/currency'
+import { getRates } from '../../services/rates'
+import { screenshotApi, voiceApi, type ParsedExpenseItem } from '../../services/api'
+import { useCategories, useCurrency } from '../../contexts/MetadataContext'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../types/expense'
 
 // Lazy-load CategoryBreakdown — it pulls in recharts (~200KB)
@@ -41,6 +43,31 @@ function DashboardPage() {
 
   const { expenses, loading, deleteExpense, addExpense, updateExpense } = useExpenses(yearMonth)
   const { categories, incomeCategories } = useCategories()
+  const { baseCurrency, currencies, rates } = useCurrency()
+
+  /**
+   * Prices parsed items into the base currency. The rate fetch happens here, after
+   * parsing, because the parser only reports the currency it heard — it has no rates.
+   * `getRates` serves a <24h cache and falls back to a stale one when offline, so this
+   * is usually instant; the context's already-loaded rates are the last resort.
+   */
+  const priceItems = useCallback(
+    async (items: ParsedExpenseItem[]): Promise<ParsedExpenseItem[]> => {
+      if (!items.some((item) => item.currency)) {
+        return items.map((item) => ({ ...item, baseCurrency }))
+      }
+
+      let liveRates = rates
+      try {
+        liveRates = (await getRates(baseCurrency)).rates
+      } catch (err) {
+        console.error('Failed to refresh rates for parsed items:', err)
+      }
+
+      return items.map((item) => priceInBase(item, baseCurrency, liveRates))
+    },
+    [baseCurrency, rates]
+  )
 
   // One query returns the whole month, both directions; the split is a render concern.
   const split = splitByType(expenses)
@@ -90,8 +117,9 @@ function DashboardPage() {
     abortControllerRef.current = abortController
 
     try {
-      const items = await screenshotApi.parseScreenshots(files, abortController.signal)
-      
+      const parsed = await screenshotApi.parseScreenshots(files, abortController.signal)
+      const items = await priceItems(parsed)
+
       // Navigate to draft page with parsed items
       navigate({
         to: '/expense-draft',
@@ -110,7 +138,7 @@ function DashboardPage() {
       setSelectedImages([])
       abortControllerRef.current = null
     }
-  }, [navigate])
+  }, [navigate, priceItems])
 
   const handleCancelParsing = useCallback(() => {
     if (abortControllerRef.current) {
@@ -130,14 +158,18 @@ function DashboardPage() {
     abortControllerRef.current = abortController
 
     try {
-      const { transcript, items } = await voiceApi.parseVoiceRecording(
+      const { transcript, items: parsed } = await voiceApi.parseVoiceRecording(
         audioBlob,
         categories,
         incomeCategories,
+        baseCurrency,
+        currencies,
         abortController.signal
       )
       console.log('Transcript:', transcript)
-      
+
+      const items = await priceItems(parsed)
+
       // Navigate to draft page with parsed items
       navigate({
         to: '/expense-draft',
@@ -154,7 +186,7 @@ function DashboardPage() {
       setIsParsingScreenshots(false)
       abortControllerRef.current = null
     }
-  }, [navigate])
+  }, [navigate, categories, incomeCategories, baseCurrency, currencies, priceItems])
 
   const handleVoiceCancel = useCallback(() => {
     setShowVoiceRecorder(false)

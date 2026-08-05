@@ -13,6 +13,13 @@ interface ParsedExpenseItem {
   type: 'expense' | 'income'
   category: string
   note: string
+  /**
+   * ISO 4217 code, present only when the speaker named a currency other than their
+   * base. `amount` then holds the figure *as spoken*, in this currency — the LLM
+   * never converts, because it has no rate. The client prices it into the base
+   * currency after parsing, which is where the rate lookup lives.
+   */
+  currency?: string
 }
 
 // Default categories as fallback
@@ -30,6 +37,9 @@ const DEFAULT_CATEGORIES = [
   '✈️ Travel',
   '📦 Other',
 ]
+
+// Mirrors the frontend's DEFAULT_BASE_CURRENCY; only reached when the client omits it.
+const DEFAULT_BASE_CURRENCY = 'SGD'
 
 const DEFAULT_INCOME_CATEGORIES = [
   '💰 Salary',
@@ -107,7 +117,9 @@ async function transcribeAudio(audioBuffer: Buffer, mimeType: string): Promise<s
  */
 function buildPrompt(
   categories: VoiceCategory[],
-  incomeCategories: VoiceCategory[]
+  incomeCategories: VoiceCategory[],
+  baseCurrency: string,
+  knownCurrencies: string[]
 ): string {
   // Build category strings with subcategories if present
   const formatCategories = (cats: VoiceCategory[]) =>
@@ -120,14 +132,28 @@ function buildPrompt(
   const categoryNames = categories.map((c) => c.name)
   const incomeCategoryNames = incomeCategories.map((c) => c.name)
 
+  const otherCurrencies = knownCurrencies.filter((c) => c !== baseCurrency)
+
   return `You are an expense parser. Extract all expense and income items from the following voice transcript.
 
 Return a JSON array of items. Each item should have:
 - "date": string in YYYY-MM-DD format (use today's date if not mentioned: ${new Date().toISOString().split('T')[0]})
-- "amount": positive number (the monetary value)
+- "amount": positive number (the monetary value, exactly as spoken — never convert it)
 - "type": "expense" or "income"
 - "category": MUST be one of the exact category names listed below
 - "note": brief description of what the expense/income was for
+- "currency": OPTIONAL ISO 4217 code, described below
+
+Currency rules — the user's base currency is ${baseCurrency}:
+- Omit "currency" entirely when the amount is in ${baseCurrency}. Most items have no currency.
+- Set "currency" ONLY when the speaker explicitly names a different currency, e.g. "3000 yen" → "JPY", "20 US dollars" → "USD", "15 euros" → "EUR", "500 baht" → "THB".
+- "amount" stays as spoken. For "3000 yen" the amount is 3000 and the currency is "JPY". Do NOT convert to ${baseCurrency} — you do not have exchange rates, and a converted number would be wrong.
+- A bare "dollars", "bucks", or a plain number with no currency named means ${baseCurrency}. Only treat "dollars" as USD when the speaker says so explicitly ("US dollars", "American dollars").
+- Any valid ISO 4217 code is allowed.${
+    otherCurrencies.length > 0
+      ? ` The user commonly spends in: ${otherCurrencies.join(', ')}.`
+      : ''
+  }
 
 Valid expense categories:
 ${formatCategories(categories).join(', ')}
@@ -138,8 +164,24 @@ ${formatCategories(incomeCategories).join(', ')}
 Example response (using actual categories from the lists above):
 [
   {"date": "2026-08-04", "amount": 25.50, "type": "expense", "category": "${categoryNames[0] || '🍜 Food'}", "note": "Lunch at restaurant"},
+  {"date": "2026-08-04", "amount": 3000, "type": "expense", "category": "${categoryNames[0] || '🍜 Food'}", "note": "Ramen in Tokyo", "currency": "JPY"},
   {"date": "2026-08-04", "amount": 5000, "type": "income", "category": "${incomeCategoryNames[0] || '💰 Salary'}", "note": "Monthly salary"}
 ]`
+}
+
+/**
+ * Accepts a currency only when it's a well-formed ISO 4217 code that differs from the
+ * base — "SGD" on a SGD account is the same as saying nothing, and carrying it forward
+ * would mark a domestic expense as foreign for the rest of its life.
+ */
+function normaliseCurrency(value: unknown, baseCurrency: string): string | undefined {
+  if (typeof value !== 'string') return undefined
+
+  const code = value.trim().toUpperCase()
+  if (!/^[A-Z]{3}$/.test(code)) return undefined
+  if (code === baseCurrency.toUpperCase()) return undefined
+
+  return code
 }
 
 /**
@@ -148,7 +190,8 @@ Example response (using actual categories from the lists above):
 function validateAndCleanParsedItems(
   items: any[],
   validCategories: string[],
-  validIncomeCategories: string[]
+  validIncomeCategories: string[],
+  baseCurrency: string
 ): ParsedExpenseItem[] {
   const today = new Date().toISOString().split('T')[0]
 
@@ -176,6 +219,8 @@ function validateAndCleanParsedItems(
         category = fuzzyMatch || '📦 Other'
       }
 
+      const currency = normaliseCurrency(item.currency, baseCurrency)
+
       return {
         date:
           typeof item.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.date)
@@ -185,6 +230,7 @@ function validateAndCleanParsedItems(
         type: item.type as 'expense' | 'income',
         category,
         note: typeof item.note === 'string' ? item.note.slice(0, 200) : '',
+        ...(currency && { currency }),
       }
     })
 }
@@ -196,13 +242,16 @@ export const voiceService = {
    * @param mimeType - The audio MIME type
    * @param categories - User's expense categories
    * @param incomeCategories - User's income categories
-   * @param provider - Optional: specify which LLM provider to use
+   * @param baseCurrency - The user's base currency; anything else spoken is foreign
+   * @param currencies - Codes the user has configured, used to steer ambiguous names
    */
   async parseVoiceRecording(
     audioBuffer: Buffer,
     mimeType: string,
     categories: VoiceCategory[],
     incomeCategories: VoiceCategory[],
+    baseCurrency = DEFAULT_BASE_CURRENCY,
+    currencies: string[] = [],
   ): Promise<{ transcript: string; items: ParsedExpenseItem[] }> {
     // Use provided categories or fall back to defaults
     const expenseCategories = categories.length > 0 ? categories :
@@ -234,7 +283,7 @@ export const voiceService = {
       },
       {
         role: 'user',
-        content: `${buildPrompt(expenseCategories, incCategories)}\n\nTranscript:\n${transcript}`,
+        content: `${buildPrompt(expenseCategories, incCategories, baseCurrency, currencies)}\n\nTranscript:\n${transcript}`,
       },
     ]
 
@@ -278,7 +327,12 @@ export const voiceService = {
     // Get valid category names for validation
     const validCategories = expenseCategories.map((c) => c.name)
     const validIncomeCategories = incCategories.map((c) => c.name)
-    const items = validateAndCleanParsedItems(parsedItems, validCategories, validIncomeCategories)
+    const items = validateAndCleanParsedItems(
+      parsedItems,
+      validCategories,
+      validIncomeCategories,
+      baseCurrency
+    )
 
     return { transcript, items }
   },

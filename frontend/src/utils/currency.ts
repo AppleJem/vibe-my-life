@@ -32,6 +32,55 @@ export function toBase(originalAmount: number, rate: number, baseCode: string): 
   return Math.round((originalAmount / rate) * factor) / factor
 }
 
+interface PricedItem {
+  amount: number
+  currency?: string
+  originalAmount?: number
+  rate?: number
+  baseCurrency?: string
+}
+
+/**
+ * Moves a parsed item's amount into the base currency, given rates fetched after the
+ * parse. A parser (LLM or OCR) reports what it heard or read — "3000 yen" — and has no
+ * rates to convert with, so this is where a foreign figure becomes a storable expense:
+ * `amount` ends up in the base currency and the spoken figure moves to `originalAmount`,
+ * exactly the shape `AddExpenseModal` produces for a hand-entered foreign expense.
+ *
+ * When no rate is available for the code, the item keeps `currency` and gains
+ * `originalAmount` but no `rate` — deliberately unpriced, so callers can flag it rather
+ * than silently banking a yen figure as dollars. `hasUsableRate` is the check for that.
+ */
+export function priceInBase<T extends PricedItem>(
+  item: T,
+  baseCurrency: string,
+  rates: Record<string, number>
+): T {
+  // No currency, or one that matches the base, means the amount is already base-priced.
+  if (!item.currency || item.currency === baseCurrency) {
+    const { currency: _unused, originalAmount: _also, rate: _too, ...rest } = item
+    return { ...rest, baseCurrency } as T
+  }
+
+  const rate = rates[item.currency]
+  if (typeof rate !== 'number' || rate <= 0) {
+    return { ...item, originalAmount: item.amount, baseCurrency }
+  }
+
+  return {
+    ...item,
+    amount: toBase(item.amount, rate, baseCurrency),
+    originalAmount: item.amount,
+    rate,
+    baseCurrency,
+  }
+}
+
+/** False only for a foreign item that `priceInBase` could not find a rate for. */
+export function hasUsableRate(item: PricedItem): boolean {
+  return !item.currency || (typeof item.rate === 'number' && item.rate > 0)
+}
+
 /**
  * Renders a rate in whichever direction reads as "1 of the stronger unit". With a
  * base of SGD: JPY (rate 122.46) → "1 SGD = 122.46 JPY", USD (rate 0.78) →

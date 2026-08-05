@@ -5,6 +5,8 @@ import { AddExpenseModal } from '../../components/ExpenseTracker/AddExpenseModal
 import { expenseKeys } from '../../hooks/useExpenses'
 import { displayCategory } from '../../constants/categories'
 import { screenshotApi, type ParsedExpenseItem } from '../../services/api'
+import { useCurrency } from '../../contexts/MetadataContext'
+import { formatAmount, hasUsableRate } from '../../utils/currency'
 import type { CreateExpenseInput, Expense } from '../../types/expense'
 
 export const Route = createFileRoute('/_authenticated/expense-draft')({
@@ -18,11 +20,16 @@ function ExpenseDraftPage() {
   const { items } = Route.useSearch()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  
+  const { baseCurrency } = useCurrency()
+
   const [draftItems, setDraftItems] = useState<ParsedExpenseItem[]>(items)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Foreign items we couldn't find a rate for. Saving them would bank the foreign
+  // figure as a base-currency amount, so the save waits until they're edited or dropped.
+  const unpricedCount = draftItems.filter((item) => !hasUsableRate(item)).length
 
   const handleEditItem = useCallback((index: number) => {
     setEditingIndex(index)
@@ -32,7 +39,9 @@ function ExpenseDraftPage() {
     async (input: CreateExpenseInput) => {
       if (editingIndex === null) return
 
-      // Update the draft item (don't save to DB yet)
+      // Update the draft item (don't save to DB yet). The modal has already converted
+      // to the base currency, so `amount` is base and the foreign fields describe what
+      // was typed — the same shape the parsed items arrive in.
       setDraftItems((prev) => {
         const updated = [...prev]
         updated[editingIndex] = {
@@ -41,12 +50,18 @@ function ExpenseDraftPage() {
           type: input.type || 'expense',
           category: input.category,
           note: input.note || '',
+          baseCurrency: input.baseCurrency ?? baseCurrency,
+          ...(input.currency && {
+            currency: input.currency,
+            originalAmount: input.originalAmount,
+            rate: input.rate,
+          }),
         }
         return updated
       })
       setEditingIndex(null)
     },
-    [editingIndex]
+    [editingIndex, baseCurrency]
   )
 
   const handleDeleteItem = useCallback((index: number) => {
@@ -55,18 +70,26 @@ function ExpenseDraftPage() {
 
   const handleConfirmAll = useCallback(async () => {
     if (draftItems.length === 0) return
+    if (unpricedCount > 0) return
 
     setIsSaving(true)
     setError(null)
 
     try {
-      // Convert draft items to CreateExpenseInput format
+      // Convert draft items to CreateExpenseInput format. `amount` is already in the
+      // base currency; the foreign trio only rides along when the item was foreign.
       const inputs: CreateExpenseInput[] = draftItems.map((item) => ({
         date: item.date,
         amount: item.amount,
         type: item.type,
         category: item.category,
         note: item.note,
+        baseCurrency: item.baseCurrency ?? baseCurrency,
+        ...(item.currency && {
+          currency: item.currency,
+          originalAmount: item.originalAmount,
+          rate: item.rate,
+        }),
       }))
 
       await screenshotApi.batchCreateExpenses(inputs)
@@ -87,7 +110,7 @@ function ExpenseDraftPage() {
     } finally {
       setIsSaving(false)
     }
-  }, [draftItems, navigate, queryClient])
+  }, [draftItems, navigate, queryClient, baseCurrency, unpricedCount])
 
   const handleCancel = useCallback(() => {
     navigate({ to: '/' })
@@ -104,6 +127,12 @@ function ExpenseDraftPage() {
           category: draftItems[editingIndex].category,
           note: draftItems[editingIndex].note,
           createdAt: new Date().toISOString(),
+          // Carried through so the modal opens on the right currency instead of
+          // silently resetting a foreign item to the base.
+          baseCurrency: draftItems[editingIndex].baseCurrency ?? baseCurrency,
+          currency: draftItems[editingIndex].currency,
+          originalAmount: draftItems[editingIndex].originalAmount,
+          rate: draftItems[editingIndex].rate,
         }
       : null
 
@@ -179,13 +208,27 @@ function ExpenseDraftPage() {
               <p className="text-xs text-zinc-600 mt-1">{item.date}</p>
             </div>
             <div className="flex items-center gap-3">
-              <span
-                className={`text-base font-semibold ${
-                  item.type === 'income' ? 'text-lime-400' : 'text-zinc-100'
-                }`}
-              >
-                {item.type === 'income' ? '+' : '-'}${item.amount.toFixed(2)}
-              </span>
+              <div className="text-right">
+                <span
+                  className={`text-base font-semibold ${
+                    item.type === 'income' ? 'text-lime-400' : 'text-zinc-100'
+                  }`}
+                >
+                  {item.type === 'income' ? '+' : '-'}
+                  {hasUsableRate(item)
+                    ? formatAmount(item.amount, item.baseCurrency ?? baseCurrency)
+                    : formatAmount(item.originalAmount ?? item.amount, item.currency!)}
+                </span>
+                {/* What was actually spoken, kept visible so a bad conversion is obvious */}
+                {item.currency && hasUsableRate(item) && (
+                  <p className="text-xs text-zinc-500">
+                    {formatAmount(item.originalAmount ?? item.amount, item.currency)}
+                  </p>
+                )}
+                {item.currency && !hasUsableRate(item) && (
+                  <p className="text-xs text-amber-400">no {item.currency} rate</p>
+                )}
+              </div>
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -213,6 +256,16 @@ function ExpenseDraftPage() {
         ))}
       </div>
 
+      {/* Unpriced foreign items block the save until they're edited or removed */}
+      {unpricedCount > 0 && (
+        <div className="px-4 py-3 bg-amber-500/10 border-t border-amber-500/20">
+          <p className="text-sm text-amber-400">
+            {unpricedCount === 1 ? '1 item has' : `${unpricedCount} items have`} no exchange
+            rate. Tap to pick a currency, or delete to continue.
+          </p>
+        </div>
+      )}
+
       {/* Error message */}
       {error && (
         <div className="px-4 py-3 bg-red-500/10 border-t border-red-500/20">
@@ -224,7 +277,7 @@ function ExpenseDraftPage() {
       <div className="border-t border-zinc-800 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <button
           onClick={handleConfirmAll}
-          disabled={isSaving || draftItems.length === 0}
+          disabled={isSaving || draftItems.length === 0 || unpricedCount > 0}
           className="w-full py-3 bg-pink-500 text-white rounded-lg font-semibold shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSaving
