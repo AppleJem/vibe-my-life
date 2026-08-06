@@ -118,6 +118,54 @@ export function formatValue(habit: Habit, completion: Completion): string {
   return 'Done'
 }
 
+/**
+ * `Morning Routine` → `morning-routine`.
+ *
+ * Tags are matched against each other — for autocomplete, and for the day someone wants
+ * to filter by one — so they are normalised to a single shape rather than left as typed.
+ * Groups are deliberately *not* put through this: they are headings people read.
+ *
+ * Returns `''` for input with nothing usable in it; callers drop those.
+ */
+export function normaliseTag(raw: string): string {
+  return raw
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+/**
+ * What a full-intensity day is worth: the habit's target when it has one, otherwise the
+ * best day in `completions`, so a habit with no goal still shows relative effort rather
+ * than a flat wall of one colour. `null` means there is nothing to grade — a boolean
+ * habit, or a stretch with nothing logged in it.
+ */
+export function intensityScale(habit: Habit, completions: Completion[]): number | null {
+  if (habit.type === 'boolean') return null
+  if (habit.target !== undefined && habit.target > 0) return habit.target
+
+  const max = Math.max(0, ...completions.map(valueOf))
+  return max > 0 ? max : null
+}
+
+/** 0 when nothing was logged, 1–4 by ratio against `scale`. Ungraded days are all 4. */
+export function levelFor(
+  completion: Completion | null,
+  scale: number | null
+): 0 | 1 | 2 | 3 | 4 {
+  if (!completion) return 0
+  if (scale === null) return 4
+
+  const ratio = valueOf(completion) / scale
+  if (ratio >= 1) return 4
+  if (ratio >= 0.66) return 3
+  if (ratio >= 0.33) return 2
+  return 1
+}
+
 export interface HeatmapCell {
   date: string
   /** 0 = nothing logged, 1–4 = increasing intensity. */
@@ -146,22 +194,7 @@ export function buildHeatmap(
 
   // Wind back to the Sunday of the current week, then back `weeks - 1` further.
   const start = addDays(today, -weekdayOf(today) - (weeks - 1) * 7)
-
-  const scale = (() => {
-    if (habit.type === 'boolean') return null
-    if (habit.target !== undefined && habit.target > 0) return habit.target
-    const max = Math.max(0, ...completions.map(valueOf))
-    return max > 0 ? max : null
-  })()
-
-  const levelFor = (completion: Completion): HeatmapCell['level'] => {
-    if (scale === null) return 4
-    const ratio = valueOf(completion) / scale
-    if (ratio >= 1) return 4
-    if (ratio >= 0.66) return 3
-    if (ratio >= 0.33) return 2
-    return 1
-  }
+  const scale = intensityScale(habit, completions)
 
   return Array.from({ length: weeks }, (_, week) =>
     Array.from({ length: 7 }, (_, day) => {
@@ -171,7 +204,7 @@ export function buildHeatmap(
       return {
         date,
         completion,
-        level: completion ? levelFor(completion) : 0,
+        level: levelFor(completion, scale),
         isFuture: date > today,
       } satisfies HeatmapCell
     })

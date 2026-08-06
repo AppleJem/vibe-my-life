@@ -9,6 +9,11 @@ habitRouter.use(authMiddleware)
 
 habitRouter.get('/', habitController.listHabits)
 habitRouter.post('/', habitController.createHabit)
+
+// Must precede `/:id` — Express matches in registration order, and this path would
+// otherwise be read as a habit whose id is "completions".
+habitRouter.get('/completions', habitController.listRecentCompletions)
+
 habitRouter.get('/:id', habitController.getHabit)
 habitRouter.put('/:id', habitController.updateHabit)
 habitRouter.delete('/:id', habitController.deleteHabit)

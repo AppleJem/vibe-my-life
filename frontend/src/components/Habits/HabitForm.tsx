@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { GroupInput, TagInput } from './SuggestInput'
+import { INPUT } from './fieldStyles'
 import { ACCENTS, HABIT_EMOJIS, accentOf } from '../../constants/habitColors'
+import { useHabitTaxonomy } from '../../hooks/useHabits'
+import { normaliseTag } from '../../utils/habit'
 import type { CreateHabitInput, Habit, HabitType } from '../../types/habit'
 
 interface HabitFormProps {
@@ -28,9 +32,6 @@ function Section({ label, hint, children }: { label: string; hint?: string; chil
   )
 }
 
-const INPUT =
-  'w-full px-3 py-2 text-base bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent'
-
 /**
  * Create and edit share one form. It replaces the page body rather than opening a modal,
  * the same in-place editor idiom the recurring settings page uses.
@@ -41,12 +42,17 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
   const [type, setType] = useState<HabitType>(habit?.type ?? 'boolean')
   const [unit, setUnit] = useState(habit?.unit ?? '')
   const [target, setTarget] = useState(habit?.target ? String(habit.target) : '')
-  const [tags, setTags] = useState((habit?.tags ?? []).join(', '))
+  // Legacy tags may predate the lowercase rule, so normalise what's already stored.
+  const [tags, setTags] = useState(() =>
+    [...new Set((habit?.tags ?? []).map(normaliseTag).filter(Boolean))]
+  )
+  const [group, setGroup] = useState(habit?.group ?? '')
   const [description, setDescription] = useState(habit?.description ?? '')
   const [color, setColor] = useState(habit?.color ?? ACCENTS[0].key)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  const taxonomy = useHabitTaxonomy()
   const accent = accentOf(color)
   const canSave = name.trim().length > 0 && !isSaving
 
@@ -62,10 +68,10 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
       // when the type isn't `count` — sending them anyway would just be noise.
       ...(type === 'count' && unit.trim() && { unit: unit.trim() }),
       ...(type !== 'boolean' && parsedTarget > 0 && { target: parsedTarget }),
-      tags: tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean),
+      tags,
+      // Always sent: null is what clears the group on an edit, and the server drops it
+      // rather than storing an empty attribute on a create.
+      group: group.trim() || null,
       color,
     })
   }
@@ -184,13 +190,12 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
         </div>
       </Section>
 
-      <Section label="Tags" hint="Comma separated.">
-        <input
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-          placeholder="morning, focus"
-          className={INPUT}
-        />
+      <Section label="Group" hint="Habits in the same group are listed together.">
+        <GroupInput value={group} suggestions={taxonomy.groups} onChange={setGroup} />
+      </Section>
+
+      <Section label="Tags" hint="Enter to add. Lowercase, no spaces.">
+        <TagInput value={tags} suggestions={taxonomy.tags} onChange={setTags} />
       </Section>
 
       <Section label="Description">

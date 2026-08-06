@@ -36,12 +36,23 @@ const completionKey = (userId: string, habitId: string, timestamp: string) => ({
 /** Every completion of one habit shares this sort-key prefix. */
 const completionPrefix = (habitId: string) => `HABIT#${habitId}#COMPLETION#`
 
+interface PrefixFilter {
+  expression: string
+  names: Record<string, string>
+  values: Record<string, unknown>
+}
+
 /**
- * Pages a `begins_with` query to exhaustion. History is read whole rather than
- * range-sliced: a `since` bound would be a UTC timestamp compared against locally-dated
- * rows, which is off-by-a-day-prone for no benefit at single-user volume.
+ * Pages a `begins_with` query to exhaustion, optionally narrowing rows with a
+ * FilterExpression. The sort key can't be range-sliced by day: it carries a UTC
+ * timestamp, and comparing that against locally-dated rows is off-by-a-day-prone. Any
+ * date bound therefore has to be a filter on the `date` attribute instead.
  */
-async function queryByPrefix<T>(userId: string, prefix: string): Promise<T[]> {
+async function queryByPrefix<T>(
+  userId: string,
+  prefix: string,
+  filter?: PrefixFilter
+): Promise<T[]> {
   const items: T[] = []
   let lastKey: Record<string, unknown> | undefined
 
@@ -52,7 +63,12 @@ async function queryByPrefix<T>(userId: string, prefix: string): Promise<T[]> {
       ExpressionAttributeValues: {
         ':pk': `USER#${userId}`,
         ':prefix': prefix,
+        ...filter?.values,
       },
+      ...(filter && {
+        FilterExpression: filter.expression,
+        ExpressionAttributeNames: filter.names,
+      }),
       ExclusiveStartKey: lastKey,
       ScanIndexForward: true,
     }))
@@ -92,6 +108,9 @@ export const habitModel = {
       // and an absent `unit` is what marks a habit as unitless.
       ...(input.unit !== undefined && { unit: input.unit }),
       ...(input.target !== undefined && { target: input.target }),
+      // A null group means ungrouped — leave the attribute off entirely rather than
+      // storing an empty one.
+      ...(input.group != null && { group: input.group }),
     }
 
     await docClient.send(new PutCommand({
@@ -104,7 +123,7 @@ export const habitModel = {
 
   async updateHabit(userId: string, habitId: string, updates: UpdateHabitInput): Promise<Habit> {
     const UPDATABLE = [
-      'name', 'emoji', 'type', 'description', 'unit', 'target', 'tags', 'color', 'archived',
+      'name', 'emoji', 'type', 'description', 'unit', 'target', 'tags', 'group', 'color', 'archived',
     ] as const
 
     const setExpressions: string[] = []
@@ -191,6 +210,24 @@ export const habitModel = {
   /** Chronological, oldest first — the sort key carries the timestamp. */
   async listCompletions(userId: string, habitId: string): Promise<Completion[]> {
     return queryByPrefix<Completion>(userId, completionPrefix(habitId))
+  },
+
+  /**
+   * Every habit's completions on or after `since` (a local `YYYY-MM-DD`), so the list
+   * page can draw a week of history for the whole list in one round trip instead of one
+   * per habit. `HABIT#` is the prefix all completions share, whichever habit they belong
+   * to; definitions sit under `META#` and are not matched.
+   *
+   * The bound is a filter on `date` — the client's own local day — rather than a sort-key
+   * range on the UTC timestamp, which would file a late-evening log under the wrong day.
+   * `date` is a DynamoDB reserved word, hence the `#date` alias.
+   */
+  async listRecentCompletions(userId: string, since: string): Promise<Completion[]> {
+    return queryByPrefix<Completion>(userId, 'HABIT#', {
+      expression: '#date >= :since',
+      names: { '#date': 'date' },
+      values: { ':since': since },
+    })
   },
 
   async createCompletion(

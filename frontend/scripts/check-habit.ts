@@ -12,6 +12,7 @@ import {
   longestStreak,
   buildHeatmap,
   formatValue,
+  normaliseTag,
 } from '../src/utils/habit'
 import type { Completion, Habit } from '../src/types/habit'
 
@@ -137,6 +138,17 @@ check('duration under an hour', formatValue(habit({ type: 'duration' }), c('2026
 check('duration on the hour', formatValue(habit({ type: 'duration' }), c('2026-08-03', { durationMinutes: 120 })), '2h')
 check('duration with remainder', formatValue(habit({ type: 'duration' }), c('2026-08-03', { durationMinutes: 95 })), '1h 35m')
 check('boolean formats as Done', formatValue(habit({ type: 'boolean' }), c('2026-08-03')), 'Done')
+
+// --- tag normalisation -------------------------------------------------------
+check('lowercases', normaliseTag('Morning'), 'morning')
+check('spaces become hyphens', normaliseTag('Morning Routine'), 'morning-routine')
+check('trims and collapses whitespace', normaliseTag('  deep   work  '), 'deep-work')
+check('drops punctuation', normaliseTag('self-care!'), 'self-care')
+check('keeps digits', normaliseTag('5k run'), '5k-run')
+check('collapses repeated hyphens', normaliseTag('a -- b'), 'a-b')
+check('trims stray hyphens', normaliseTag('-focus-'), 'focus')
+check('nothing usable is empty', normaliseTag('!!!'), '')
+check('already normalised is unchanged', normaliseTag('deep-work'), 'deep-work')
 
 console.log(failures === 0 ? '\nAll checks passed' : `\n${failures} check(s) FAILED`)
 process.exit(failures === 0 ? 0 : 1)

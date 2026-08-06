@@ -1,22 +1,41 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { HabitForm } from '../../../components/Habits/HabitForm'
-import { accentOf } from '../../../constants/habitColors'
-import { useHabits } from '../../../hooks/useHabits'
+import { WeekStrip } from '../../../components/Habits/WeekStrip'
+import { useHabits, useRecentCompletions } from '../../../hooks/useHabits'
 import { localToday } from '../../../utils/recurring'
-import type { CreateHabitInput, Habit } from '../../../types/habit'
+import type { Completion, CreateHabitInput, Habit } from '../../../types/habit'
 
 export const Route = createFileRoute('/_authenticated/habits/')({
   component: HabitsPage,
 })
 
+/** Named groups first, alphabetically; the ungrouped remainder trails with no header. */
+const UNGROUPED = ''
+
+function groupHabits(habits: Habit[]): [string, Habit[]][] {
+  const byGroup = habits.reduce<Record<string, Habit[]>>((acc, habit) => {
+    const key = habit.group ?? UNGROUPED
+    ;(acc[key] ??= []).push(habit)
+    return acc
+  }, {})
+
+  return Object.entries(byGroup).sort(([a], [b]) => {
+    if (a === UNGROUPED) return 1
+    if (b === UNGROUPED) return -1
+    return a.localeCompare(b)
+  })
+}
+
 function HabitsPage() {
   const navigate = useNavigate()
   const { habits, loading, error, createHabit } = useHabits()
+  const { byHabit } = useRecentCompletions()
   const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   const today = localToday()
+  const groups = useMemo(() => groupHabits(habits), [habits])
 
   const handleCreate = async (input: CreateHabitInput) => {
     setIsSaving(true)
@@ -71,14 +90,29 @@ function HabitsPage() {
           <p className="text-sm text-zinc-600 mt-1">Add something you want to keep doing.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {habits.map((habit) => (
-            <HabitRow
-              key={habit.id}
-              habit={habit}
-              today={today}
-              onClick={() => navigate({ to: '/habits/$habitId', params: { habitId: habit.id } })}
-            />
+        <div className="space-y-6">
+          {groups.map(([group, members]) => (
+            <section key={group || 'ungrouped'}>
+              {group && (
+                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-2">
+                  {group}
+                </h3>
+              )}
+
+              <div className="space-y-2">
+                {members.map((habit) => (
+                  <HabitRow
+                    key={habit.id}
+                    habit={habit}
+                    completions={byHabit.get(habit.id) ?? []}
+                    today={today}
+                    onClick={() =>
+                      navigate({ to: '/habits/$habitId', params: { habitId: habit.id } })
+                    }
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
@@ -96,15 +130,13 @@ function HabitsPage() {
 
 interface HabitRowProps {
   habit: Habit
+  /** This habit's slice of the shared recent-history fetch. */
+  completions: Completion[]
   today: string
   onClick: () => void
 }
 
-function HabitRow({ habit, today, onClick }: HabitRowProps) {
-  const accent = accentOf(habit.color)
-  // Read straight off the denormalised watermark — no per-habit history query.
-  const isDone = habit.lastCompletedDate === today
-
+function HabitRow({ habit, completions, today, onClick }: HabitRowProps) {
   return (
     <button
       onClick={onClick}
@@ -121,14 +153,7 @@ function HabitRow({ habit, today, onClick }: HabitRowProps) {
         )}
       </div>
 
-      <span
-        className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs ${
-          isDone ? `${accent.solid} text-zinc-950` : 'border-2 border-zinc-700'
-        }`}
-        aria-label={isDone ? 'Done today' : 'Not done today'}
-      >
-        {isDone ? '✓' : ''}
-      </span>
+      <WeekStrip habit={habit} completions={completions} today={today} />
     </button>
   )
 }

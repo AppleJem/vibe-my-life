@@ -27,6 +27,12 @@ export interface Habit {
   /** Optional daily goal. When set, it is what heatmap intensity is measured against. */
   target?: number
   tags: string[]
+  /**
+   * Free-text heading the list groups by — "Rehab exercises". Stored with the casing the
+   * user typed, unlike tags: it is read as a title, not matched against. Absent when the
+   * habit belongs to no group.
+   */
+  group?: string
   /** Accent key from the fixed palette; tints the heatmap and the big box. */
   color: string
   /**
@@ -48,6 +54,8 @@ export interface CreateHabitInput {
   unit?: string
   target?: number
   tags?: string[]
+  /** `null` is "no group" — the form always sends the field, empty or not. */
+  group?: string | null
   color?: string
 }
 
@@ -60,6 +68,7 @@ export interface UpdateHabitInput {
   unit?: string | null
   target?: number | null
   tags?: string[]
+  group?: string | null
   color?: string
   archived?: boolean
 }

@@ -265,6 +265,15 @@ export const habitApi = {
   },
 
   /**
+   * Every habit's completions from `since` (a local `YYYY-MM-DD`) onwards — one request
+   * behind the list page's week strip, however many habits there are.
+   */
+  async recentCompletions(since: string): Promise<Completion[]> {
+    const { data } = await api.get('/habits/completions', { params: { since } })
+    return data.completions
+  },
+
+  /**
    * Returns the updated habit alongside the completion so the list cache can be
    * refreshed without a second round trip — `lastCompletedDate` has just moved.
    *

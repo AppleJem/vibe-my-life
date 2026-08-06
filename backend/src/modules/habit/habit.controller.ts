@@ -15,6 +15,7 @@ const createHabitSchema = z.object({
   unit: z.string().optional(),
   target: z.number().positive().optional(),
   tags: z.array(z.string().min(1)).optional().default([]),
+  group: z.string().min(1).nullable().optional(),
   color: z.string().min(1).optional(),
 })
 
@@ -28,6 +29,8 @@ const updateHabitSchema = z.object({
   unit: z.string().nullable().optional(),
   target: z.number().positive().nullable().optional(),
   tags: z.array(z.string().min(1)).optional(),
+  // null drops the habit out of its group without clearing anything else.
+  group: z.string().min(1).nullable().optional(),
   color: z.string().min(1).optional(),
   archived: z.boolean().optional(),
 })
@@ -153,6 +156,27 @@ export const habitController = {
     } catch (err) {
       console.error('Error deleting habit:', err)
       return res.status(500).json({ error: 'Failed to delete habit' })
+    }
+  },
+
+  /**
+   * Every habit's recent completions in one call, for the list page's week strip.
+   * Routed before `GET /:id`, or Express would match this as a habit called
+   * "completions".
+   */
+  async listRecentCompletions(req: Request, res: Response) {
+    const parsed = isoDate.safeParse(req.query.since)
+
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'since must be a YYYY-MM-DD date' })
+    }
+
+    try {
+      const completions = await habitModel.listRecentCompletions(req.userId!, parsed.data)
+      return res.json({ completions })
+    } catch (err) {
+      console.error('Error fetching recent completions:', err)
+      return res.status(500).json({ error: 'Failed to fetch completions' })
     }
   },
 
