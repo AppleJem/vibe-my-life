@@ -24,11 +24,11 @@ export interface Habit {
   target?: number
   tags: string[]
   /**
-   * Free-text heading the list groups by — "Rehab exercises". Kept as typed, unlike tags:
-   * it is read as a title rather than matched against. Absent when ungrouped.
+   * The `HabitGroup` this habit belongs to, or absent when ungrouped. Authority on
+   * *membership*; the group's `habitIds` is authority on *order*.
    */
-  group?: string
-  /** Key into ACCENTS in `constants/habitColors.ts`. */
+  groupId?: string
+  /** The accent itself, as a `#rrggbb` hex — not a key into a palette. */
   color: string
   /**
    * Newest completion's local date, denormalised by the server so the list page can
@@ -47,8 +47,8 @@ export interface CreateHabitInput {
   unit?: string
   target?: number
   tags?: string[]
-  /** `null` is "no group" — the form always sends the field, empty or not. */
-  group?: string | null
+  /** `null` is "no group" — the form always sends the field, set or not. */
+  groupId?: string | null
   color?: string
 }
 
@@ -61,9 +61,33 @@ export interface UpdateHabitInput {
   unit?: string | null
   target?: number | null
   tags?: string[]
-  group?: string | null
+  groupId?: string | null
   color?: string
   archived?: boolean
+}
+
+/**
+ * A named bucket of habits, rendered as a section header on the list page and openable as
+ * its own page for reordering.
+ *
+ * `habitIds` carries display order only — membership is each habit's `groupId`. The two are
+ * allowed to disagree: readers append members the array hasn't heard of and skip ids that
+ * have moved out, so a half-applied write costs an order, never a habit.
+ */
+export interface HabitGroup {
+  id: string
+  name: string
+  habitIds: string[]
+  createdAt: string
+}
+
+export interface CreateHabitGroupInput {
+  name: string
+}
+
+export interface UpdateHabitGroupInput {
+  name?: string
+  habitIds?: string[]
 }
 
 export interface Completion {

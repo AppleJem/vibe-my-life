@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { HabitForm } from '../../../components/Habits/HabitForm'
 import { WeekStrip } from '../../../components/Habits/WeekStrip'
 import { useHabits, useRecentCompletions } from '../../../hooks/useHabits'
+import { groupHabits } from '../../../utils/habit'
 import { localToday } from '../../../utils/recurring'
 import type { Completion, CreateHabitInput, Habit } from '../../../types/habit'
 
@@ -10,32 +11,15 @@ export const Route = createFileRoute('/_authenticated/habits/')({
   component: HabitsPage,
 })
 
-/** Named groups first, alphabetically; the ungrouped remainder trails with no header. */
-const UNGROUPED = ''
-
-function groupHabits(habits: Habit[]): [string, Habit[]][] {
-  const byGroup = habits.reduce<Record<string, Habit[]>>((acc, habit) => {
-    const key = habit.group ?? UNGROUPED
-    ;(acc[key] ??= []).push(habit)
-    return acc
-  }, {})
-
-  return Object.entries(byGroup).sort(([a], [b]) => {
-    if (a === UNGROUPED) return 1
-    if (b === UNGROUPED) return -1
-    return a.localeCompare(b)
-  })
-}
-
 function HabitsPage() {
   const navigate = useNavigate()
-  const { habits, loading, error, createHabit } = useHabits()
+  const { habits, groups, loading, error, createHabit } = useHabits()
   const { byHabit } = useRecentCompletions()
   const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   const today = localToday()
-  const groups = useMemo(() => groupHabits(habits), [habits])
+  const sections = useMemo(() => groupHabits(habits, groups), [habits, groups])
 
   const handleCreate = async (input: CreateHabitInput) => {
     setIsSaving(true)
@@ -91,12 +75,22 @@ function HabitsPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {groups.map(([group, members]) => (
-            <section key={group || 'ungrouped'}>
+          {sections.map(({ group, members }) => (
+            <section key={group?.id ?? 'ungrouped'}>
               {group && (
-                <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500 mb-2">
-                  {group}
-                </h3>
+                // The header is its own tap target, separate from the rows beneath it —
+                // tapping the group opens it, tapping a habit opens the habit.
+                <button
+                  onClick={() =>
+                    navigate({ to: '/habits/groups/$groupId', params: { groupId: group.id } })
+                  }
+                  className="flex items-center gap-1 mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  <span>{group.name}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               )}
 
               <div className="space-y-2">

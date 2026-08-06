@@ -1,9 +1,15 @@
 /**
  * Habits live in their own table (`vibe-my-life-habit`), keyed the same way as expenses:
- * `PK = USER#<userId>`, with the sort key discriminating the two item shapes.
+ * `PK = USER#<userId>`, with the sort key discriminating the item shapes.
  *
  *   Definition  SK = META#<habitId>
  *   Completion  SK = HABIT#<habitId>#COMPLETION#<timestamp>
+ *   Group       SK = HABIT_GROUP#<groupId>
+ *
+ * `HABIT_GROUP#` deliberately does not begin with `HABIT#` — the sixth character differs —
+ * so it stays clear of the bare `begins_with(SK, 'HABIT#')` sweep `listRecentCompletions`
+ * uses to pull every habit's completions in one query. Any future prefix has to clear the
+ * same bar.
  */
 
 /**
@@ -28,12 +34,11 @@ export interface Habit {
   target?: number
   tags: string[]
   /**
-   * Free-text heading the list groups by — "Rehab exercises". Stored with the casing the
-   * user typed, unlike tags: it is read as a title, not matched against. Absent when the
-   * habit belongs to no group.
+   * The `HabitGroup` this habit belongs to, or absent when it belongs to none. This is the
+   * authority on *membership*; the group's own `habitIds` is the authority on *order*.
    */
-  group?: string
-  /** Accent key from the fixed palette; tints the heatmap and the big box. */
+  groupId?: string
+  /** Accent as a `#rrggbb` hex; tints the heatmap and the big box. */
   color: string
   /**
    * Denormalised copy of the newest completion's local `date`, so the list page can show
@@ -54,8 +59,8 @@ export interface CreateHabitInput {
   unit?: string
   target?: number
   tags?: string[]
-  /** `null` is "no group" — the form always sends the field, empty or not. */
-  group?: string | null
+  /** `null` is "no group" — the form always sends the field, set or not. */
+  groupId?: string | null
   color?: string
 }
 
@@ -68,9 +73,34 @@ export interface UpdateHabitInput {
   unit?: string | null
   target?: number | null
   tags?: string[]
-  group?: string | null
+  groupId?: string | null
   color?: string
   archived?: boolean
+}
+
+/**
+ * A named bucket of habits, rendered as a section header on the list page.
+ *
+ * `habitIds` is the display order and nothing more: membership is read off each habit's
+ * `groupId`. Keeping order separate from membership means the two can disagree without
+ * anything breaking — the reader appends members the array has never heard of and skips
+ * ids that have since moved out — so a failed write leaves a stale order, not a lost habit.
+ */
+export interface HabitGroup {
+  id: string
+  /** Free text, stored with the casing the user typed. It is read as a heading. */
+  name: string
+  habitIds: string[]
+  createdAt: string
+}
+
+export interface CreateHabitGroupInput {
+  name: string
+}
+
+export interface UpdateHabitGroupInput {
+  name?: string
+  habitIds?: string[]
 }
 
 export interface Completion {

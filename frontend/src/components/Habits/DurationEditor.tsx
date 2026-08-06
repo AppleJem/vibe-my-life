@@ -62,7 +62,7 @@ export function DurationEditor({ habit, isSaving, onConfirm, onCancel }: Duratio
         <p className="text-sm text-zinc-400 mb-6">How long?</p>
 
         <div className="text-center mb-5">
-          <span className={`text-5xl font-bold ${accent.text}`}>
+          <span style={accent.text} className="text-5xl font-bold">
             {running ? clock(elapsed!) : minutes}
           </span>
           <p className="text-xs text-zinc-500 mt-1">{running ? 'running' : 'minutes'}</p>
@@ -82,9 +82,10 @@ export function DurationEditor({ habit, isSaving, onConfirm, onCancel }: Duratio
                 <button
                   key={preset}
                   onClick={() => setMinutes(preset)}
+                  style={minutes === preset ? accent.solid : undefined}
                   className={`py-2 rounded-lg text-sm transition-colors ${
                     minutes === preset
-                      ? `${accent.solid} text-zinc-950 font-semibold`
+                      ? 'text-zinc-950 font-semibold'
                       : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                   }`}
                 >
@@ -120,7 +121,8 @@ export function DurationEditor({ habit, isSaving, onConfirm, onCancel }: Duratio
           <button
             onClick={() => onConfirm(minutes, notes)}
             disabled={isSaving || running}
-            className={`flex-1 rounded-xl py-3 text-sm font-semibold text-zinc-950 disabled:opacity-50 ${accent.solid}`}
+            style={accent.solid}
+            className="flex-1 rounded-xl py-3 text-sm font-semibold text-zinc-950 disabled:opacity-50"
           >
             {isSaving ? 'Saving…' : 'Log it'}
           </button>

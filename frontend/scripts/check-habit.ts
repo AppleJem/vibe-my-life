@@ -12,9 +12,12 @@ import {
   longestStreak,
   buildHeatmap,
   formatValue,
+  groupHabits,
   normaliseTag,
+  orderMembers,
 } from '../src/utils/habit'
-import type { Completion, Habit } from '../src/types/habit'
+import { accentOf, withAlpha } from '../src/constants/habitColors'
+import type { Completion, Habit, HabitGroup } from '../src/types/habit'
 
 let failures = 0
 
@@ -95,7 +98,7 @@ const habit = (over: Partial<Habit> = {}): Habit => ({
   type: 'count',
   unit: 'pages',
   tags: [],
-  color: 'pink',
+  color: '#ec4899',
   createdAt: '2026-01-01T00:00:00.000Z',
   ...over,
 })
@@ -149,6 +152,66 @@ check('collapses repeated hyphens', normaliseTag('a -- b'), 'a-b')
 check('trims stray hyphens', normaliseTag('-focus-'), 'focus')
 check('nothing usable is empty', normaliseTag('!!!'), '')
 check('already normalised is unchanged', normaliseTag('deep-work'), 'deep-work')
+
+// --- grouping ----------------------------------------------------------------
+// Membership lives on `habit.groupId`, order lives on `group.habitIds`, and nothing writes
+// the two atomically. These pin the rules that keep a disagreement between them harmless.
+const h = (id: string, groupId?: string): Habit => habit({ id, name: id, groupId })
+
+const grp = (id: string, name: string, habitIds: string[]): HabitGroup => ({
+  id,
+  name,
+  habitIds,
+  createdAt: '2026-01-01T00:00:00.000Z',
+})
+
+check(
+  'order follows habitIds, not the input order',
+  orderMembers([h('a'), h('b'), h('c')], ['c', 'a', 'b']).map((x) => x.id),
+  ['c', 'a', 'b']
+)
+check(
+  'a member habitIds has never seen goes last',
+  orderMembers([h('a'), h('b'), h('new')], ['b', 'a']).map((x) => x.id),
+  ['b', 'a', 'new']
+)
+check(
+  'a stale id in habitIds is skipped',
+  orderMembers([h('a'), h('b')], ['gone', 'b', 'a']).map((x) => x.id),
+  ['b', 'a']
+)
+check('empty habitIds keeps the input order', orderMembers([h('a'), h('b')], []).map((x) => x.id), ['a', 'b'])
+
+const sections = groupHabits(
+  [h('a', 'g2'), h('loose'), h('b', 'g1'), h('c', 'g1')],
+  [grp('g1', 'Bravo', ['c', 'b']), grp('g2', 'Alpha', ['a'])]
+)
+
+check('groups sort by name, ungrouped last', sections.map((s) => s.group?.name ?? null), ['Alpha', 'Bravo', null])
+check('members use the group order', sections[1].members.map((x) => x.id), ['c', 'b'])
+check('ungrouped section collects the rest', sections[2].members.map((x) => x.id), ['loose'])
+
+// An empty group is not a section — the heading would sit over nothing.
+check('a group with no members is dropped', groupHabits([], [grp('g1', 'Bravo', [])]).length, 0)
+// A group deleted out from under its habits must not swallow them.
+check(
+  'a habit whose group is gone falls back to ungrouped',
+  groupHabits([h('orphan', 'missing')], []).map((s) => [s.group, s.members.map((x) => x.id)]),
+  [[null, ['orphan']]]
+)
+// No ungrouped habits means no trailing headerless section at all.
+check('no ungrouped section when everything is grouped', groupHabits([h('a', 'g1')], [grp('g1', 'B', ['a'])]).length, 1)
+
+// --- colour ------------------------------------------------------------------
+check('withAlpha splits the channels', withAlpha('#ec4899', 0.5), 'rgba(236, 72, 153, 0.5)')
+check('withAlpha handles a leading zero byte', withAlpha('#00ff08', 1), 'rgba(0, 255, 8, 1)')
+check('a hex passes through', accentOf('#22d3ee').hex, '#22d3ee')
+check('uppercase hex is accepted', accentOf('#22D3EE').hex, '#22D3EE')
+// A value stored before the migration, or any other junk, must not render colourless.
+check('a legacy palette key falls back', accentOf('pink').hex, '#ec4899')
+check('nonsense falls back', accentOf('').hex, '#ec4899')
+check('shorthand hex falls back', accentOf('#fff').hex, '#ec4899')
+check('level 4 is the colour itself', accentOf('#22d3ee').levels[4], '#22d3ee')
 
 console.log(failures === 0 ? '\nAll checks passed' : `\n${failures} check(s) FAILED`)
 process.exit(failures === 0 ? 0 : 1)

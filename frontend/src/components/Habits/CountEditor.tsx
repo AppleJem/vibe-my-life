@@ -45,7 +45,7 @@ export function CountEditor({ habit, isSaving, onConfirm, onCancel }: CountEdito
           </button>
 
           <div className="text-center min-w-24">
-            <span className={`text-5xl font-bold ${accent.text}`}>{count}</span>
+            <span style={accent.text} className="text-5xl font-bold">{count}</span>
             {unit && <p className="text-xs text-zinc-500 mt-1">{unit}</p>}
           </div>
 
@@ -88,7 +88,8 @@ export function CountEditor({ habit, isSaving, onConfirm, onCancel }: CountEdito
           <button
             onClick={() => onConfirm(count, notes)}
             disabled={isSaving}
-            className={`flex-1 rounded-xl py-3 text-sm font-semibold text-zinc-950 disabled:opacity-50 ${accent.solid}`}
+            style={accent.solid}
+            className="flex-1 rounded-xl py-3 text-sm font-semibold text-zinc-950 disabled:opacity-50"
           >
             {isSaving ? 'Saving…' : 'Log it'}
           </button>

@@ -14,6 +14,9 @@ import type {
   UpdateHabitInput,
   Completion,
   CreateCompletionInput,
+  HabitGroup,
+  CreateHabitGroupInput,
+  UpdateHabitGroupInput,
 } from '../types/habit'
 import type { Category } from '../constants/categories'
 
@@ -234,9 +237,14 @@ export const importApi = {
  * calls carry `today`: the server is UTC and must not decide when a day rolls over.
  */
 export const habitApi = {
-  async list(): Promise<Habit[]> {
+  /**
+   * Habits and groups together — the one read the whole feature runs on. The group page
+   * serves itself out of this rather than fetching its own members, which would be a
+   * request per group on top of a list that already had every habit in it.
+   */
+  async list(): Promise<{ habits: Habit[]; groups: HabitGroup[] }> {
     const { data } = await api.get('/habits')
-    return data.habits
+    return { habits: data.habits, groups: data.groups ?? [] }
   },
 
   async get(id: string): Promise<Habit> {
@@ -294,6 +302,24 @@ export const habitApi = {
       `/habits/${habitId}/completions/${encodeURIComponent(timestamp)}`
     )
     return data.habit
+  },
+}
+
+/** Writes only — groups are read from `habitApi.list()`. */
+export const habitGroupApi = {
+  async create(input: CreateHabitGroupInput): Promise<HabitGroup> {
+    const { data } = await api.post('/habit-groups', input)
+    return data.group
+  },
+
+  async update(id: string, input: UpdateHabitGroupInput): Promise<HabitGroup> {
+    const { data } = await api.put(`/habit-groups/${id}`, input)
+    return data.group
+  },
+
+  /** The member habits survive; they come back ungrouped. */
+  async remove(id: string): Promise<void> {
+    await api.delete(`/habit-groups/${id}`)
   },
 }
 

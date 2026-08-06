@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
-import { GroupInput, TagInput } from './SuggestInput'
+import { GroupPicker } from './GroupPicker'
+import { TagInput } from './SuggestInput'
 import { INPUT } from './fieldStyles'
-import { ACCENTS, HABIT_EMOJIS, accentOf } from '../../constants/habitColors'
-import { useHabitTaxonomy } from '../../hooks/useHabits'
+import { ACCENTS, DEFAULT_COLOR, HABIT_EMOJIS, accentOf } from '../../constants/habitColors'
+import { useHabitGroups, useHabitTaxonomy } from '../../hooks/useHabits'
 import { normaliseTag } from '../../utils/habit'
 import type { CreateHabitInput, Habit, HabitType } from '../../types/habit'
 
@@ -46,13 +47,18 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
   const [tags, setTags] = useState(() =>
     [...new Set((habit?.tags ?? []).map(normaliseTag).filter(Boolean))]
   )
-  const [group, setGroup] = useState(habit?.group ?? '')
+  const [groupId, setGroupId] = useState<string | null>(habit?.groupId ?? null)
   const [description, setDescription] = useState(habit?.description ?? '')
-  const [color, setColor] = useState(habit?.color ?? ACCENTS[0].key)
+  // Same reason as the tags above: a habit stored before the hex migration still carries a
+  // palette key ("pink"), which the server now rejects. `accentOf` is what the rest of the
+  // form already renders through, so seeding from it means opening the editor normalises
+  // the value and saving migrates that habit — rather than 400ing on a field nobody touched.
+  const [color, setColor] = useState(() => accentOf(habit?.color ?? DEFAULT_COLOR).hex)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
   const taxonomy = useHabitTaxonomy()
+  const { groups, createGroup } = useHabitGroups()
   const accent = accentOf(color)
   const canSave = name.trim().length > 0 && !isSaving
 
@@ -71,7 +77,7 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
       tags,
       // Always sent: null is what clears the group on an edit, and the server drops it
       // rather than storing an empty attribute on a create.
-      group: group.trim() || null,
+      groupId,
       color,
     })
   }
@@ -120,8 +126,9 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
             <button
               key={option}
               onClick={() => setEmoji(option)}
+              style={emoji === option ? accent.ring : undefined}
               className={`aspect-square rounded-lg text-xl flex items-center justify-center transition-colors ${
-                emoji === option ? `ring-2 ${accent.ring} bg-zinc-800` : 'bg-zinc-800/50 hover:bg-zinc-800'
+                emoji === option ? 'ring-2 bg-zinc-800' : 'bg-zinc-800/50 hover:bg-zinc-800'
               }`}
             >
               {option}
@@ -136,9 +143,10 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
             <button
               key={option.type}
               onClick={() => setType(option.type)}
+              style={type === option.type ? accent.solid : undefined}
               className={`px-2 py-3 rounded-lg text-center transition-colors ${
                 type === option.type
-                  ? `${accent.solid} text-zinc-950`
+                  ? 'text-zinc-950'
                   : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
               }`}
             >
@@ -175,23 +183,45 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
         </Section>
       )}
 
-      <Section label="Colour">
+      <Section label="Colour" hint="Or pick any colour with the last swatch.">
         <div className="flex gap-2">
           {ACCENTS.map((option) => (
             <button
-              key={option.key}
-              onClick={() => setColor(option.key)}
+              key={option.hex}
+              onClick={() => setColor(option.hex)}
               aria-label={option.label}
-              className={`w-9 h-9 rounded-full ${option.solid} ${
-                color === option.key ? 'ring-2 ring-offset-2 ring-offset-zinc-950 ring-zinc-100' : ''
+              style={{ backgroundColor: option.hex }}
+              className={`w-9 h-9 rounded-full ${
+                color === option.hex ? 'ring-2 ring-offset-2 ring-offset-zinc-950 ring-zinc-100' : ''
               }`}
             />
           ))}
+
+          {/* The stored value is the hex itself now, so the palette is a shortcut rather
+              than the whole vocabulary — anything the picker returns is equally valid. */}
+          <label
+            aria-label="Custom colour"
+            style={accent.solid}
+            className="w-9 h-9 rounded-full grid place-items-center cursor-pointer ring-1 ring-inset ring-zinc-100/40"
+          >
+            <span className="text-xs text-zinc-950 font-semibold">+</span>
+            <input
+              type="color"
+              value={accent.hex}
+              onChange={(e) => setColor(e.target.value)}
+              className="sr-only"
+            />
+          </label>
         </div>
       </Section>
 
       <Section label="Group" hint="Habits in the same group are listed together.">
-        <GroupInput value={group} suggestions={taxonomy.groups} onChange={setGroup} />
+        <GroupPicker
+          value={groupId}
+          groups={groups}
+          onChange={setGroupId}
+          onCreate={(name) => createGroup({ name })}
+        />
       </Section>
 
       <Section label="Tags" hint="Enter to add. Lowercase, no spaces.">
@@ -222,7 +252,8 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
           <button
             onClick={handleSave}
             disabled={!canSave}
-            className={`w-full rounded-xl py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40 ${accent.solid}`}
+            style={accent.solid}
+            className="w-full rounded-xl py-3 text-sm font-semibold text-zinc-950 disabled:opacity-40"
           >
             {isSaving ? 'Saving…' : habit ? 'Save changes' : 'Create habit'}
           </button>

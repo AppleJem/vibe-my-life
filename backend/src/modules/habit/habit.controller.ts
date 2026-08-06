@@ -1,11 +1,14 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { habitModel } from './habit.model.js'
+import { habitGroupModel, habitModel } from './habit.model.js'
 import type { Completion, Habit, HabitType } from './habit.types.d.js'
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
 
 const habitType = z.enum(['boolean', 'count', 'duration'])
+
+/** The stored colour is the hex itself — there is no palette key to look up any more. */
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colour must be a #rrggbb hex')
 
 const createHabitSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -15,8 +18,8 @@ const createHabitSchema = z.object({
   unit: z.string().optional(),
   target: z.number().positive().optional(),
   tags: z.array(z.string().min(1)).optional().default([]),
-  group: z.string().min(1).nullable().optional(),
-  color: z.string().min(1).optional(),
+  groupId: z.string().min(1).nullable().optional(),
+  color: hexColor.optional(),
 })
 
 // null on `unit`/`target` clears them — switching a count habit to boolean has to shed
@@ -30,9 +33,18 @@ const updateHabitSchema = z.object({
   target: z.number().positive().nullable().optional(),
   tags: z.array(z.string().min(1)).optional(),
   // null drops the habit out of its group without clearing anything else.
-  group: z.string().min(1).nullable().optional(),
-  color: z.string().min(1).optional(),
+  groupId: z.string().min(1).nullable().optional(),
+  color: hexColor.optional(),
   archived: z.boolean().optional(),
+})
+
+const createHabitGroupSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+})
+
+const updateHabitGroupSchema = z.object({
+  name: z.string().min(1).optional(),
+  habitIds: z.array(z.string().min(1)).optional(),
 })
 
 /**
@@ -82,10 +94,22 @@ const newestDate = (completions: Completion[]): string | null =>
   )
 
 export const habitController = {
+  /**
+   * Habits *and* groups, in one response.
+   *
+   * Groups are not fetched separately and never per-habit: everything the list page, the
+   * group page, and the form's group picker need is here, so opening a group is a cache
+   * read rather than another round trip. The two prefix queries run concurrently — they
+   * hit the same partition and neither depends on the other.
+   */
   async listHabits(req: Request, res: Response) {
     try {
-      const habits = await habitModel.listHabits(req.userId!)
-      return res.json({ habits })
+      const [habits, groups] = await Promise.all([
+        habitModel.listHabits(req.userId!),
+        habitGroupModel.listGroups(req.userId!),
+      ])
+
+      return res.json({ habits, groups })
     } catch (err) {
       console.error('Error fetching habits:', err)
       return res.status(500).json({ error: 'Failed to fetch habits' })
@@ -107,6 +131,7 @@ export const habitController = {
     const parsed = createHabitSchema.safeParse(req.body)
 
     if (!parsed.success) {
+      console.warn('Rejected habit create:', parsed.error.flatten())
       return res.status(400).json({ error: parsed.error.flatten() })
     }
 
@@ -127,6 +152,9 @@ export const habitController = {
     const parsed = updateHabitSchema.safeParse(req.body)
 
     if (!parsed.success) {
+      // A rejected body used to leave nothing in the log at all, so a 400 in the browser
+      // had no server-side counterpart to read.
+      console.warn('Rejected habit update:', parsed.error.flatten())
       return res.status(400).json({ error: parsed.error.flatten() })
     }
 
@@ -258,6 +286,61 @@ export const habitController = {
     } catch (err) {
       console.error('Error deleting completion:', err)
       return res.status(500).json({ error: 'Failed to delete completion' })
+    }
+  },
+}
+
+/**
+ * Writes only. Reading groups goes through `GET /habits`, which returns them alongside the
+ * habits — a group endpoint that served its own members would put the list page back to one
+ * request per group.
+ */
+export const habitGroupController = {
+  async createGroup(req: Request, res: Response) {
+    const parsed = createHabitGroupSchema.safeParse(req.body)
+
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() })
+    }
+
+    try {
+      const group = await habitGroupModel.createGroup(req.userId!, parsed.data)
+      return res.status(201).json({ group })
+    } catch (err) {
+      console.error('Error creating habit group:', err)
+      return res.status(500).json({ error: 'Failed to create group' })
+    }
+  },
+
+  async updateGroup(req: Request, res: Response) {
+    const parsed = updateHabitGroupSchema.safeParse(req.body)
+
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() })
+    }
+
+    const id = req.params.id as string
+
+    try {
+      const existing = await habitGroupModel.getGroup(req.userId!, id)
+      if (!existing) return res.status(404).json({ error: 'Group not found' })
+
+      const group = await habitGroupModel.updateGroup(req.userId!, id, parsed.data)
+      return res.json({ group })
+    } catch (err) {
+      console.error('Error updating habit group:', err)
+      return res.status(500).json({ error: 'Failed to update group' })
+    }
+  },
+
+  /** The habits survive; they come back ungrouped. */
+  async deleteGroup(req: Request, res: Response) {
+    try {
+      await habitGroupModel.deleteGroup(req.userId!, req.params.id as string)
+      return res.status(204).send()
+    } catch (err) {
+      console.error('Error deleting habit group:', err)
+      return res.status(500).json({ error: 'Failed to delete group' })
     }
   },
 }

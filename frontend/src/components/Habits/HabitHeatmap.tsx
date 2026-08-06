@@ -53,8 +53,9 @@ export function HabitHeatmap({ habit, completions, today, weeks = 26 }: HabitHea
                     setSelected({ date: cell.date, completion: cell.completion })
                   }
                   aria-label={cell.date}
+                  style={cell.isFuture ? undefined : { backgroundColor: accent.levels[cell.level] }}
                   className={`w-3 h-3 rounded-sm transition-opacity ${
-                    cell.isFuture ? 'opacity-0 pointer-events-none' : accent.levels[cell.level]
+                    cell.isFuture ? 'opacity-0 pointer-events-none' : ''
                   } ${
                     selected?.date === cell.date ? 'ring-1 ring-zinc-400' : ''
                   } ${cell.date === today ? 'ring-1 ring-zinc-500' : ''}`}

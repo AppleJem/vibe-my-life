@@ -14,18 +14,27 @@ import type {
   UpdateHabitInput,
   Completion,
   CreateCompletionInput,
+  HabitGroup,
+  CreateHabitGroupInput,
+  UpdateHabitGroupInput,
 } from './habit.types.d.js'
 
 /** DynamoDB's hard cap on items per BatchWriteItem call. */
 const BATCH_SIZE = 25
 
-const DEFAULT_COLOR = 'pink'
+/** Pink — the first swatch the form offers. */
+const DEFAULT_COLOR = '#ec4899'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const habitKey = (userId: string, habitId: string) => ({
   PK: `USER#${userId}`,
   SK: `META#${habitId}`,
+})
+
+const groupKey = (userId: string, groupId: string) => ({
+  PK: `USER#${userId}`,
+  SK: `HABIT_GROUP#${groupId}`,
 })
 
 const completionKey = (userId: string, habitId: string, timestamp: string) => ({
@@ -80,6 +89,45 @@ async function queryByPrefix<T>(
   return items
 }
 
+/**
+ * Appends a habit to a group's order in one atomic write — no read first, so two habits
+ * created at once can't clobber each other's append.
+ */
+async function appendToGroup(userId: string, groupId: string, habitId: string): Promise<void> {
+  await docClient.send(new UpdateCommand({
+    TableName: HABIT_TABLE_NAME,
+    Key: groupKey(userId, groupId),
+    UpdateExpression: 'SET #habitIds = list_append(if_not_exists(#habitIds, :empty), :one)',
+    ExpressionAttributeNames: { '#habitIds': 'habitIds' },
+    ExpressionAttributeValues: { ':empty': [], ':one': [habitId] },
+    // A group that has since been deleted just means there is no order to record. The
+    // habit's own `groupId` is what membership is read from, so nothing is lost.
+    ConditionExpression: 'attribute_exists(SK)',
+  })).catch((err: unknown) => {
+    if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') throw err
+  })
+}
+
+/**
+ * Drops a habit from a group's order. Read-modify-write, because removal needs the index —
+ * and unlike the append, a lost update here only leaves a stale id, which the reader
+ * already ignores.
+ */
+async function removeFromGroup(userId: string, groupId: string, habitId: string): Promise<void> {
+  const group = await habitGroupModel.getGroup(userId, groupId)
+  if (!group || !group.habitIds.includes(habitId)) return
+
+  await docClient.send(new UpdateCommand({
+    TableName: HABIT_TABLE_NAME,
+    Key: groupKey(userId, groupId),
+    UpdateExpression: 'SET #habitIds = :habitIds',
+    ExpressionAttributeNames: { '#habitIds': 'habitIds' },
+    ExpressionAttributeValues: {
+      ':habitIds': group.habitIds.filter((id) => id !== habitId),
+    },
+  }))
+}
+
 export const habitModel = {
   async listHabits(userId: string): Promise<Habit[]> {
     return queryByPrefix<Habit>(userId, 'META#')
@@ -110,7 +158,7 @@ export const habitModel = {
       ...(input.target !== undefined && { target: input.target }),
       // A null group means ungrouped — leave the attribute off entirely rather than
       // storing an empty one.
-      ...(input.group != null && { group: input.group }),
+      ...(input.groupId != null && { groupId: input.groupId }),
     }
 
     await docClient.send(new PutCommand({
@@ -118,12 +166,16 @@ export const habitModel = {
       Item: { ...habitKey(userId, habit.id), ...habit },
     }))
 
+    // Recorded after the habit exists: an order entry pointing at nothing would be the
+    // worse failure, and the reader drops ids it can't resolve anyway.
+    if (habit.groupId) await appendToGroup(userId, habit.groupId, habit.id)
+
     return habit
   },
 
   async updateHabit(userId: string, habitId: string, updates: UpdateHabitInput): Promise<Habit> {
     const UPDATABLE = [
-      'name', 'emoji', 'type', 'description', 'unit', 'target', 'tags', 'group', 'color', 'archived',
+      'name', 'emoji', 'type', 'description', 'unit', 'target', 'tags', 'groupId', 'color', 'archived',
     ] as const
 
     const setExpressions: string[] = []
@@ -147,8 +199,12 @@ export const habitModel = {
       }
     }
 
+    // Read before writing, so a group move knows which group to splice the habit out of.
+    // Only when `groupId` is actually part of the update — every other field is blind.
+    const previous = updates.groupId !== undefined ? await this.getHabit(userId, habitId) : null
+
     if (setExpressions.length === 0 && removeExpressions.length === 0) {
-      const existing = await this.getHabit(userId, habitId)
+      const existing = previous ?? await this.getHabit(userId, habitId)
       if (!existing) throw new Error('Habit not found')
       return existing
     }
@@ -167,7 +223,14 @@ export const habitModel = {
       ReturnValues: 'ALL_NEW',
     }))
 
-    return result.Attributes as Habit
+    const habit = result.Attributes as Habit
+
+    if (previous && previous.groupId !== habit.groupId) {
+      if (previous.groupId) await removeFromGroup(userId, previous.groupId, habitId)
+      if (habit.groupId) await appendToGroup(userId, habit.groupId, habitId)
+    }
+
+    return habit
   },
 
   /**
@@ -177,6 +240,7 @@ export const habitModel = {
    * definition goes last, so a retry of the same delete finishes the job.
    */
   async deleteHabit(userId: string, habitId: string): Promise<void> {
+    const habit = await this.getHabit(userId, habitId)
     const completions = await this.listCompletions(userId, habitId)
 
     for (let i = 0; i < completions.length; i += BATCH_SIZE) {
@@ -205,6 +269,8 @@ export const habitModel = {
       TableName: HABIT_TABLE_NAME,
       Key: habitKey(userId, habitId),
     }))
+
+    if (habit?.groupId) await removeFromGroup(userId, habit.groupId, habitId)
   },
 
   /** Chronological, oldest first — the sort key carries the timestamp. */
@@ -216,7 +282,9 @@ export const habitModel = {
    * Every habit's completions on or after `since` (a local `YYYY-MM-DD`), so the list
    * page can draw a week of history for the whole list in one round trip instead of one
    * per habit. `HABIT#` is the prefix all completions share, whichever habit they belong
-   * to; definitions sit under `META#` and are not matched.
+   * to; definitions sit under `META#` and groups under `HABIT_GROUP#` — note that the
+   * latter is *not* matched, since the sixth character is `_` rather than `#`. Any new
+   * sort-key prefix has to keep clear of this sweep the same way.
    *
    * The bound is a filter on `date` — the client's own local day — rather than a sort-key
    * range on the UTC timestamp, which would file a late-evening log under the wrong day.
@@ -283,5 +351,99 @@ export const habitModel = {
     }))
 
     return result.Attributes as Habit
+  },
+}
+
+export const habitGroupModel = {
+  async listGroups(userId: string): Promise<HabitGroup[]> {
+    return queryByPrefix<HabitGroup>(userId, 'HABIT_GROUP#')
+  },
+
+  async getGroup(userId: string, groupId: string): Promise<HabitGroup | null> {
+    const result = await docClient.send(new GetCommand({
+      TableName: HABIT_TABLE_NAME,
+      Key: groupKey(userId, groupId),
+    }))
+
+    return (result.Item as HabitGroup) ?? null
+  },
+
+  async createGroup(userId: string, input: CreateHabitGroupInput): Promise<HabitGroup> {
+    const group: HabitGroup = {
+      id: uuidv4(),
+      name: input.name,
+      habitIds: [],
+      createdAt: new Date().toISOString(),
+    }
+
+    await docClient.send(new PutCommand({
+      TableName: HABIT_TABLE_NAME,
+      Item: { ...groupKey(userId, group.id), ...group },
+    }))
+
+    return group
+  },
+
+  async updateGroup(
+    userId: string,
+    groupId: string,
+    updates: UpdateHabitGroupInput
+  ): Promise<HabitGroup> {
+    const UPDATABLE = ['name', 'habitIds'] as const
+
+    const setExpressions: string[] = []
+    const expressionAttributeValues: Record<string, unknown> = {}
+    const expressionAttributeNames: Record<string, string> = {}
+
+    for (const field of UPDATABLE) {
+      const value = updates[field]
+      if (value === undefined) continue
+
+      expressionAttributeNames[`#${field}`] = field
+      setExpressions.push(`#${field} = :${field}`)
+      expressionAttributeValues[`:${field}`] = value
+    }
+
+    if (setExpressions.length === 0) {
+      const existing = await this.getGroup(userId, groupId)
+      if (!existing) throw new Error('Group not found')
+      return existing
+    }
+
+    const result = await docClient.send(new UpdateCommand({
+      TableName: HABIT_TABLE_NAME,
+      Key: groupKey(userId, groupId),
+      UpdateExpression: `SET ${setExpressions.join(', ')}`,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ExpressionAttributeNames: expressionAttributeNames,
+      ReturnValues: 'ALL_NEW',
+    }))
+
+    return result.Attributes as HabitGroup
+  },
+
+  /**
+   * Deleting a group keeps its habits — they fall back to ungrouped. The members are
+   * released *before* the group row goes, so a failure part-way leaves habits pointing at
+   * a group that still exists rather than at one that doesn't.
+   */
+  async deleteGroup(userId: string, groupId: string): Promise<void> {
+    const habits = await habitModel.listHabits(userId)
+
+    for (const habit of habits) {
+      if (habit.groupId !== groupId) continue
+
+      await docClient.send(new UpdateCommand({
+        TableName: HABIT_TABLE_NAME,
+        Key: habitKey(userId, habit.id),
+        UpdateExpression: 'REMOVE #groupId',
+        ExpressionAttributeNames: { '#groupId': 'groupId' },
+      }))
+    }
+
+    await docClient.send(new DeleteCommand({
+      TableName: HABIT_TABLE_NAME,
+      Key: groupKey(userId, groupId),
+    }))
   },
 }

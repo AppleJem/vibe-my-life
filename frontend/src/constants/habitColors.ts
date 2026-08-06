@@ -1,76 +1,85 @@
+import type { CSSProperties } from 'react'
+
 /**
- * The accent a habit is tinted with. Every class is written out in full — Tailwind scans
- * source for literal strings, so a constructed `bg-${color}-500` would be purged.
+ * The accent a habit is tinted with.
  *
- * `levels` is indexed by `HeatmapCell.level`: 0 is an unlogged day, 4 is target met.
+ * The stored value *is* the colour — a `#rrggbb` hex — rather than a key into a palette
+ * that then has to be translated into Tailwind classes. That translation is what forced the
+ * six accents to be a closed set: Tailwind scans source for literal class strings, so
+ * `bg-${color}-500` would have been purged and every shade had to be written out by hand.
+ * With the hex in hand the tints are computed, so `ACCENTS` is only the row of swatches the
+ * form offers as a quick path — any hex renders.
+ *
+ * Colours come back as inline style objects for the same reason. The one exception is the
+ * focus ring, which stays on Tailwind's `ring-2` utility and gets its colour through the
+ * `--tw-ring-color` variable that utility already reads.
  */
+
 export interface HabitAccent {
-  key: string
+  /** `#rrggbb`. This is what is stored on the habit. */
+  hex: string
   label: string
-  /** The big check box when filled, and the FAB. */
-  solid: string
-  /** Ring around the box while idle / holding. */
-  ring: string
-  text: string
+}
+
+/** The hexes the palette used to reach through Tailwind class names. */
+export const ACCENTS: HabitAccent[] = [
+  { hex: '#ec4899', label: 'Pink' },
+  { hex: '#22d3ee', label: 'Cyan' },
+  { hex: '#a78bfa', label: 'Violet' },
+  { hex: '#a3e635', label: 'Lime' },
+  { hex: '#fbbf24', label: 'Amber' },
+  { hex: '#38bdf8', label: 'Sky' },
+]
+
+export const DEFAULT_COLOR = ACCENTS[0].hex
+
+const HEX = /^#[0-9a-f]{6}$/i
+
+/** `#ec4899` + 0.5 → `rgba(236, 72, 153, 0.5)`. Assumes a validated six-digit hex. */
+export function withAlpha(hex: string, alpha: number): string {
+  const value = parseInt(hex.slice(1), 16)
+  const r = (value >> 16) & 0xff
+  const g = (value >> 8) & 0xff
+  const b = value & 0xff
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+/** Unlogged days keep the neutral wash they had as a class. */
+const EMPTY_LEVEL = 'rgba(39, 39, 42, 0.6)'
+
+export interface Accent {
+  hex: string
+  /** The big check box when filled, the FAB, and the save button. */
+  solid: CSSProperties
+  /** Spread onto an element that also carries Tailwind's `ring-2`. */
+  ring: CSSProperties
+  text: CSSProperties
+  /** Indexed by `HeatmapCell.level`: 0 is an unlogged day, 4 is target met. */
   levels: [string, string, string, string, string]
 }
 
-const EMPTY = 'bg-zinc-800/60'
+/**
+ * Falls back to the first accent on anything that isn't a six-digit hex, so a value stored
+ * before the migration — or any other junk — can't render colourless.
+ */
+export function accentOf(color: string): Accent {
+  const hex = HEX.test(color) ? color : DEFAULT_COLOR
 
-export const ACCENTS: HabitAccent[] = [
-  {
-    key: 'pink',
-    label: 'Pink',
-    solid: 'bg-pink-500',
-    ring: 'ring-pink-500',
-    text: 'text-pink-500',
-    levels: [EMPTY, 'bg-pink-500/25', 'bg-pink-500/50', 'bg-pink-500/75', 'bg-pink-500'],
-  },
-  {
-    key: 'cyan',
-    label: 'Cyan',
-    solid: 'bg-cyan-400',
-    ring: 'ring-cyan-400',
-    text: 'text-cyan-400',
-    levels: [EMPTY, 'bg-cyan-400/25', 'bg-cyan-400/50', 'bg-cyan-400/75', 'bg-cyan-400'],
-  },
-  {
-    key: 'violet',
-    label: 'Violet',
-    solid: 'bg-violet-400',
-    ring: 'ring-violet-400',
-    text: 'text-violet-400',
-    levels: [EMPTY, 'bg-violet-400/25', 'bg-violet-400/50', 'bg-violet-400/75', 'bg-violet-400'],
-  },
-  {
-    key: 'lime',
-    label: 'Lime',
-    solid: 'bg-lime-400',
-    ring: 'ring-lime-400',
-    text: 'text-lime-400',
-    levels: [EMPTY, 'bg-lime-400/25', 'bg-lime-400/50', 'bg-lime-400/75', 'bg-lime-400'],
-  },
-  {
-    key: 'amber',
-    label: 'Amber',
-    solid: 'bg-amber-400',
-    ring: 'ring-amber-400',
-    text: 'text-amber-400',
-    levels: [EMPTY, 'bg-amber-400/25', 'bg-amber-400/50', 'bg-amber-400/75', 'bg-amber-400'],
-  },
-  {
-    key: 'sky',
-    label: 'Sky',
-    solid: 'bg-sky-400',
-    ring: 'ring-sky-400',
-    text: 'text-sky-400',
-    levels: [EMPTY, 'bg-sky-400/25', 'bg-sky-400/50', 'bg-sky-400/75', 'bg-sky-400'],
-  },
-]
-
-/** Falls back to the first accent, so an unknown stored key can't render colourless. */
-export const accentOf = (key: string): HabitAccent =>
-  ACCENTS.find((accent) => accent.key === key) ?? ACCENTS[0]
+  return {
+    hex,
+    solid: { backgroundColor: hex },
+    ring: { '--tw-ring-color': hex } as CSSProperties,
+    text: { color: hex },
+    levels: [
+      EMPTY_LEVEL,
+      withAlpha(hex, 0.25),
+      withAlpha(hex, 0.5),
+      withAlpha(hex, 0.75),
+      hex,
+    ],
+  }
+}
 
 /** Offered in the habit form. Nothing enforces this list — any emoji is stored as-is. */
 export const HABIT_EMOJIS = [

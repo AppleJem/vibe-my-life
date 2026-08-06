@@ -74,9 +74,10 @@ export function BigCheckBox({ habit, isDone, isSaving, onHoldComplete }: BigChec
         aria-label={isDone ? `${habit.name} done today` : `Hold to complete ${habit.name}`}
         // touch-none stops the browser claiming the gesture as a scroll mid-hold; the
         // page still scrolls anywhere outside the box.
+        style={isDone ? accent.solid : undefined}
         className={`relative w-56 h-56 rounded-[2rem] flex items-center justify-center touch-none select-none transition-colors duration-200 ${
           isDone
-            ? `${accent.solid} shadow-lg`
+            ? 'shadow-lg'
             : `bg-zinc-900 border-2 border-zinc-800 ${isHolding ? 'scale-[0.97]' : ''}`
         } transition-transform`}
       >
@@ -98,8 +99,7 @@ export function BigCheckBox({ habit, isDone, isSaving, onHoldComplete }: BigChec
               fill="none"
               strokeWidth="3"
               strokeLinecap="round"
-              className={accent.text}
-              stroke="currentColor"
+              stroke={accent.hex}
               strokeDasharray={CIRCUMFERENCE}
               strokeDashoffset={CIRCUMFERENCE * (1 - progress)}
             />
@@ -111,7 +111,9 @@ export function BigCheckBox({ habit, isDone, isSaving, onHoldComplete }: BigChec
         </span>
       </button>
 
-      <p className={`text-sm ${isDone ? accent.text : 'text-zinc-500'}`}>{caption}</p>
+      <p style={isDone ? accent.text : undefined} className={`text-sm ${isDone ? '' : 'text-zinc-500'}`}>
+        {caption}
+      </p>
     </div>
   )
 }

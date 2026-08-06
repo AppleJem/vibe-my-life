@@ -3,10 +3,13 @@ import { INPUT } from './fieldStyles'
 import { normaliseTag } from '../../utils/habit'
 
 /**
- * Free-text fields that suggest what has already been used elsewhere. The vocabulary is
+ * A free-text field that suggests what has already been used elsewhere. The vocabulary is
  * derived from the habits already loaded (`useHabitTaxonomy`), so there is nothing to
  * store and nothing to keep in sync — but typing something new is always allowed, which
- * is why these are inputs with a dropdown rather than pickers.
+ * is why this is an input with a dropdown rather than a picker.
+ *
+ * Groups used to work the same way. They are stored entities with an identity now, so they
+ * get a picker of real options instead — see `GroupPicker`.
  */
 
 interface SuggestionsProps {
@@ -121,39 +124,3 @@ export function TagInput({ value, suggestions, onChange }: TagInputProps) {
   )
 }
 
-interface GroupInputProps {
-  value: string
-  suggestions: string[]
-  onChange: (group: string) => void
-}
-
-/**
- * A single group name. Deliberately not normalised beyond trimming on save: a group is a
- * heading the list renders as typed, so "Rehab exercises" should stay that way.
- */
-export function GroupInput({ value, suggestions, onChange }: GroupInputProps) {
-  const [focused, setFocused] = useState(false)
-
-  return (
-    <div>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder="Rehab exercises"
-        className={INPUT}
-      />
-
-      {focused && (
-        <Suggestions
-          items={matches(suggestions, value)}
-          onPick={(group) => {
-            onChange(group)
-            setFocused(false)
-          }}
-        />
-      )}
-    </div>
-  )
-}

@@ -1,4 +1,4 @@
-import type { Completion, Habit } from '../types/habit'
+import type { Completion, Habit, HabitGroup } from '../types/habit'
 
 /**
  * Pure helpers for the habit detail page — streaks, the heatmap grid, and per-type
@@ -135,6 +135,74 @@ export function normaliseTag(raw: string): string {
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
+}
+
+export interface HabitSection {
+  /** `null` is the ungrouped remainder, which renders without a header. */
+  group: HabitGroup | null
+  members: Habit[]
+}
+
+/**
+ * Orders one group's habits by the group's `habitIds`.
+ *
+ * The two sides are allowed to drift — membership lives on `habit.groupId`, order lives on
+ * `group.habitIds`, and nothing writes them atomically. So this is deliberately forgiving in
+ * both directions: an id in `habitIds` that is no longer a member is skipped, and a member
+ * `habitIds` has never heard of (just created, or a write that didn't land) goes to the end
+ * rather than disappearing. Membership is what's true; order is a hint.
+ */
+export function orderMembers(members: Habit[], habitIds: string[]): Habit[] {
+  const byId = new Map(members.map((habit) => [habit.id, habit]))
+  const ordered: Habit[] = []
+
+  for (const id of habitIds) {
+    const habit = byId.get(id)
+    if (!habit) continue
+    byId.delete(id)
+    ordered.push(habit)
+  }
+
+  return [...ordered, ...byId.values()]
+}
+
+/**
+ * The list page's sections: named groups in name order, each with its members in the
+ * group's own order, and everything ungrouped trailing in one headerless section.
+ *
+ * A group with no members is dropped — an empty heading is noise on the list page, and the
+ * group is still reachable and repopulatable from the habit form.
+ */
+export function groupHabits(habits: Habit[], groups: HabitGroup[]): HabitSection[] {
+  const byGroup = new Map<string, Habit[]>()
+  const ungrouped: Habit[] = []
+
+  for (const habit of habits) {
+    if (!habit.groupId) {
+      ungrouped.push(habit)
+      continue
+    }
+
+    const existing = byGroup.get(habit.groupId)
+    if (existing) existing.push(habit)
+    else byGroup.set(habit.groupId, [habit])
+  }
+
+  const sections: HabitSection[] = [...groups]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .flatMap((group) => {
+      const members = byGroup.get(group.id)
+      byGroup.delete(group.id)
+      return members ? [{ group, members: orderMembers(members, group.habitIds) }] : []
+    })
+
+  // Habits whose group has vanished — a delete that half-landed — fall back to ungrouped
+  // rather than dropping out of the list entirely.
+  for (const orphans of byGroup.values()) ungrouped.push(...orphans)
+
+  if (ungrouped.length > 0) sections.push({ group: null, members: ungrouped })
+
+  return sections
 }
 
 /**

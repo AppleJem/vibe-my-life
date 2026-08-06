@@ -38,9 +38,8 @@ export function WeekStrip({ habit, completions, today }: WeekStripProps) {
             aria-label={`${formatShortDate(date)}: ${
               completion ? formatValue(habit, completion) : 'nothing logged'
             }`}
-            className={`w-4 h-4 rounded-sm ${accent.levels[levelFor(completion, scale)]} ${
-              date === today ? 'ring-1 ring-zinc-500' : ''
-            }`}
+            style={{ backgroundColor: accent.levels[levelFor(completion, scale)] }}
+            className={`w-4 h-4 rounded-sm ${date === today ? 'ring-1 ring-zinc-500' : ''}`}
           />
         )
       })}

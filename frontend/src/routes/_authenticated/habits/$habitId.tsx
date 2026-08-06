@@ -87,10 +87,13 @@ function HabitDetailPage() {
   }
 
   const handleSaveEdits = async (input: CreateHabitInput) => {
+    console.log('handleSaveEdits', input)
     setIsSaving(true)
     try {
       await updateHabit(input)
       setIsEditing(false)
+    } catch (err) {
+      console.error('Error updating habit:', err)
     } finally {
       setIsSaving(false)
     }
@@ -152,9 +155,9 @@ function HabitDetailPage() {
       {logError && <p className="text-center text-sm text-red-400 -mt-2 mb-4">{logError}</p>}
 
       <div className="flex justify-center gap-6 text-center mb-8">
-        <Stat label="streak" value={streak} accent={accent.text} />
-        <Stat label="best" value={best} accent="text-zinc-300" />
-        <Stat label="total" value={completions.length} accent="text-zinc-300" />
+        <Stat label="streak" value={streak} color={accent.hex} />
+        <Stat label="best" value={best} />
+        <Stat label="total" value={completions.length} />
       </div>
 
       <div className="space-y-8">
@@ -167,7 +170,7 @@ function HabitDetailPage() {
         {(habit.tags.length > 0 || habit.description) && (
           <section>
             {habit.tags.length > 0 && (
-              <p className={`text-xs mb-2 ${accent.text}`}>
+              <p style={accent.text} className="text-xs mb-2">
                 {habit.tags.map((tag) => `#${tag}`).join(' ')}
               </p>
             )}
@@ -201,10 +204,13 @@ function HabitDetailPage() {
   )
 }
 
-function Stat({ label, value, accent }: { label: string; value: number; accent: string }) {
+/** `color` is the habit's accent hex; the neutral stats leave it off. */
+function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
     <div>
-      <p className={`text-2xl font-bold ${accent}`}>{value}</p>
+      <p style={color ? { color } : undefined} className={`text-2xl font-bold ${color ? '' : 'text-zinc-300'}`}>
+        {value}
+      </p>
       <p className="text-xs text-zinc-500">{label}</p>
     </div>
   )
