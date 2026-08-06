@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { HabitForm } from '../../../components/Habits/HabitForm'
-import { WeekStrip } from '../../../components/Habits/WeekStrip'
+import { MAX_DAYS, WeekStrip } from '../../../components/Habits/WeekStrip'
 import { useHabits, useRecentCompletions } from '../../../hooks/useHabits'
 import { groupHabits } from '../../../utils/habit'
 import { localToday } from '../../../utils/recurring'
@@ -14,7 +14,8 @@ export const Route = createFileRoute('/_authenticated/habits/')({
 function HabitsPage() {
   const navigate = useNavigate()
   const { habits, groups, loading, error, createHabit } = useHabits()
-  const { byHabit } = useRecentCompletions()
+  // The strip can stretch to `MAX_DAYS` boxes on a wide window, so fetch that far back.
+  const { byHabit } = useRecentCompletions(MAX_DAYS)
   const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -137,17 +138,12 @@ function HabitRow({ habit, completions, today, onClick }: HabitRowProps) {
       className="w-full flex items-center gap-3 bg-zinc-900 rounded-xl px-4 py-3 hover:bg-zinc-800 transition-colors text-left"
     >
       <span className="text-2xl w-9 shrink-0 text-center">{habit.emoji}</span>
-
-      <div className="flex-1 min-w-0">
+      {/* `min-w-0` so the name truncates instead of pushing the column wider — the strip
+          sizes itself to whatever this column ends up being. */}
+      <div className="flex-1 min-w-0 flex flex-col items-stretch gap-1.5">
         <p className="text-zinc-100 truncate">{habit.name}</p>
-        {habit.tags.length > 0 && (
-          <p className="text-xs text-zinc-500 truncate">
-            {habit.tags.map((tag) => `#${tag}`).join(' ')}
-          </p>
-        )}
+        <WeekStrip habit={habit} completions={completions} today={today} />
       </div>
-
-      <WeekStrip habit={habit} completions={completions} today={today} />
     </button>
   )
 }

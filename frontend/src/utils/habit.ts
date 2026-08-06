@@ -45,6 +45,26 @@ export function formatShortDate(date: string): string {
   return `${day} ${MONTHS[month - 1]}`
 }
 
+/** `2026-08` (or any date in it) → `August 2026`. */
+export function formatMonth(month: string): string {
+  const MONTHS = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ]
+  const [year, index] = month.split('-').map(Number)
+  return `${MONTHS[index - 1]} ${year}`
+}
+
 /**
  * The days a habit has been logged, newest first. One completion per day is enforced
  * server-side, so this is a set of days, not a multiset.
@@ -241,28 +261,42 @@ export interface HeatmapCell {
   completion: Completion | null
   /** Days after `today` — rendered as empty placeholders so the grid stays rectangular. */
   isFuture: boolean
+  /** Days from the neighbouring months that pad the first and last rows. */
+  isOutside: boolean
+}
+
+/** Days in `2026-08`. Day 0 of the next month is the last day of this one. */
+function daysInMonth(month: string): number {
+  const [year, index] = month.split('-').map(Number)
+  return new Date(Date.UTC(year, index, 0)).getUTCDate()
 }
 
 /**
- * A GitHub-style grid: `weeks` columns of 7 days, each column Sunday→Saturday, ending on
- * the week containing `today`.
+ * One calendar month as rows of 7 days, Sunday→Saturday, padded at both ends with the
+ * neighbouring months' days so every row is full.
+ *
+ * `month` is `YYYY-MM` and defaults to the month `today` falls in.
  *
  * Intensity is measured against the habit's `target` when it has one, and against the
- * period's own maximum otherwise — so a habit with no goal still shows relative effort
+ * habit's own best day otherwise — so a habit with no goal still shows relative effort
  * rather than a flat wall of one colour. Boolean habits have nothing to grade, so every
  * logged day is level 4.
  */
-export function buildHeatmap(
+export function buildMonthHeatmap(
   habit: Habit,
   completions: Completion[],
   today: string,
-  weeks = 26
+  month = today.slice(0, 7)
 ): HeatmapCell[][] {
   const byDate = new Map(completions.map((c) => [c.date, c]))
-
-  // Wind back to the Sunday of the current week, then back `weeks - 1` further.
-  const start = addDays(today, -weekdayOf(today) - (weeks - 1) * 7)
   const scale = intensityScale(habit, completions)
+
+  const first = `${month}-01`
+  const last = `${month}-${String(daysInMonth(month)).padStart(2, '0')}`
+  // Back to the Sunday on or before the 1st, forward to the Saturday on or after the last.
+  const start = addDays(first, -weekdayOf(first))
+  const end = addDays(last, 6 - weekdayOf(last))
+  const weeks = (daysBetween(start, end) + 1) / 7
 
   return Array.from({ length: weeks }, (_, week) =>
     Array.from({ length: 7 }, (_, day) => {
@@ -274,6 +308,7 @@ export function buildHeatmap(
         completion,
         level: levelFor(completion, scale),
         isFuture: date > today,
+        isOutside: date.slice(0, 7) !== month,
       } satisfies HeatmapCell
     })
   )
