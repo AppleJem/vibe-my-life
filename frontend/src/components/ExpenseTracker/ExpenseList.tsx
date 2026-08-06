@@ -1,7 +1,7 @@
 import { ExpenseItem } from './ExpenseItem'
 import { useCurrency } from '../../contexts/MetadataContext'
 import { formatAmount } from '../../utils/currency'
-import { signedAmount } from '../../utils/transaction'
+import { signedAmount, byNewestFirst } from '../../utils/transaction'
 import type { Expense } from '../../types/expense'
 
 interface ExpenseListProps {
@@ -50,7 +50,8 @@ export function ExpenseList({ expenses, loading, onDelete, onExpenseClick }: Exp
   return (
     <div className="space-y-6">
       {sortedDates.map((date) => {
-        const dayExpenses = grouped[date]
+        // Newest first within the day; the query only guarantees the date grouping.
+        const dayExpenses = [...grouped[date]].sort(byNewestFirst)
         // Net for the day: a day with a 4,000 salary and a 12.50 lunch reads +3,987.50,
         // not 4,012.50. `signedAmount` is what keeps the two directions apart.
         const dayTotal = dayExpenses.reduce((sum, e) => sum + signedAmount(e), 0)
