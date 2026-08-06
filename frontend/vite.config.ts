@@ -13,7 +13,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         // Pre-cache all built assets
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,mp3}'],
         // Cache API responses with NetworkFirst strategy
         runtimeCaching: [
           {
@@ -38,7 +38,13 @@ export default defineConfig({
         background_color: '#09090b',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        scope: '/',
+        // No start_url on purpose: iOS honours it and would force every
+        // home-screen install to open '/'. Omitting it makes each install
+        // launch from the page it was added on (Expenses vs. Habits).
+        // Explicit `undefined` is required — vite-plugin-pwa injects
+        // start_url: '/' by default if the key is absent entirely.
+        start_url: undefined,
         icons: [
           {
             src: '/icon-192.png',

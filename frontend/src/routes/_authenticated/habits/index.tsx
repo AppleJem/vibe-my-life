@@ -11,6 +11,9 @@ export const Route = createFileRoute('/_authenticated/habits/')({
   component: HabitsPage,
 })
 
+/** Stands in for a group id in the collapsed set — no real group owns these habits. */
+const UNGROUPED_KEY = 'ungrouped'
+
 function HabitsPage() {
   const navigate = useNavigate()
   const { habits, groups, loading, error, createHabit } = useHabits()
@@ -18,9 +21,17 @@ function HabitsPage() {
   const { byHabit } = useRecentCompletions(MAX_DAYS)
   const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
 
   const today = localToday()
   const sections = useMemo(() => groupHabits(habits, groups), [habits, groups])
+
+  const toggleCollapsed = (key: string) =>
+    setCollapsed((current) => {
+      const next = new Set(current)
+      if (!next.delete(key)) next.add(key)
+      return next
+    })
 
   const handleCreate = async (input: CreateHabitInput) => {
     setIsSaving(true)
@@ -76,39 +87,78 @@ function HabitsPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {sections.map(({ group, members }) => (
-            <section key={group?.id ?? 'ungrouped'}>
-              {group && (
-                // The header is its own tap target, separate from the rows beneath it —
-                // tapping the group opens it, tapping a habit opens the habit.
-                <button
-                  onClick={() =>
-                    navigate({ to: '/habits/groups/$groupId', params: { groupId: group.id } })
-                  }
-                  className="flex items-center gap-1 mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  <span>{group.name}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              )}
+          {sections.map(({ group, members }) => {
+            const key = group?.id ?? UNGROUPED_KEY
+            const isCollapsed = collapsed.has(key)
 
-              <div className="space-y-2">
-                {members.map((habit) => (
-                  <HabitRow
-                    key={habit.id}
-                    habit={habit}
-                    completions={byHabit.get(habit.id) ?? []}
-                    today={today}
-                    onClick={() =>
-                      navigate({ to: '/habits/$habitId', params: { habitId: habit.id } })
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
+            return (
+              <section key={key}>
+                <div className="flex items-center gap-2 mb-2">
+                  {group ? (
+                    // The header is its own tap target, separate from the rows beneath it —
+                    // tapping the group opens it, tapping a habit opens the habit.
+                    <button
+                      onClick={() =>
+                        navigate({ to: '/habits/groups/$groupId', params: { groupId: group.id } })
+                      }
+                      className="flex items-center gap-1 min-w-0 text-xs font-medium uppercase tracking-wide text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      <span className="truncate">{group.name}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  ) : (
+                    // The ungrouped remainder has no page to open, so its heading is plain text.
+                    <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                      Ungrouped
+                    </span>
+                  )}
+
+                  <button
+                    onClick={() => toggleCollapsed(key)}
+                    aria-expanded={!isCollapsed}
+                    aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${group?.name ?? 'Ungrouped'}`}
+                    className="ml-auto shrink-0 p-1 -mr-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className={`h-4 w-4 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* `0fr`→`1fr` collapses to the rows' own height without measuring it, so the
+                    section animates shut whatever it contains. */}
+                <div
+                  className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                    isCollapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'
+                  }`}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                    <div className="space-y-2">
+                      {members.map((habit) => (
+                        <HabitRow
+                          key={habit.id}
+                          habit={habit}
+                          completions={byHabit.get(habit.id) ?? []}
+                          today={today}
+                          onClick={() =>
+                            navigate({ to: '/habits/$habitId', params: { habitId: habit.id } })
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )
+          })}
         </div>
       )}
 

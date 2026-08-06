@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useLongPress } from '../../hooks/useLongPress'
 import { accentOf } from '../../constants/habitColors'
 import { playChargeSwoosh, playCompletionKlang } from '../../utils/sounds'
+import checkmarkUrl from '../../assets/checkmark.svg?url'
 import type { Habit } from '../../types/habit'
 
 interface BigCheckBoxProps {
@@ -75,11 +76,10 @@ export function BigCheckBox({ habit, isDone, isSaving, onHoldComplete }: BigChec
         // touch-none stops the browser claiming the gesture as a scroll mid-hold; the
         // page still scrolls anywhere outside the box.
         style={isDone ? accent.solid : undefined}
-        className={`relative w-56 h-56 rounded-[2rem] flex items-center justify-center touch-none select-none transition-colors duration-200 ${
-          isDone
-            ? 'shadow-lg'
-            : `bg-zinc-900 border-2 border-zinc-800 ${isHolding ? 'scale-[0.97]' : ''}`
-        } transition-transform`}
+        className={`relative w-56 h-56 rounded-[2rem] flex items-center justify-center touch-none select-none transition-colors duration-200 ${isDone
+          ? 'shadow-lg'
+          : `bg-zinc-900 border-2 border-zinc-800 ${isHolding ? 'scale-[0.97]' : ''}`
+          } transition-transform`}
       >
         {/* The fill ring, drawn only while holding. Rotated so it starts at 12 o'clock. */}
         {!isDone && (
@@ -106,9 +106,11 @@ export function BigCheckBox({ habit, isDone, isSaving, onHoldComplete }: BigChec
           </svg>
         )}
 
-        <span className={`text-7xl transition-opacity ${isDone ? '' : 'opacity-40'}`}>
-          {isDone ? '✓' : habit.emoji}
-        </span>
+        {isDone ? (
+          <img src={checkmarkUrl} alt="" aria-hidden className="w-32 h-32" />
+        ) : (
+          <span className="text-7xl opacity-40 transition-opacity">{habit.emoji}</span>
+        )}
       </button>
 
       <p style={isDone ? accent.text : undefined} className={`text-sm ${isDone ? '' : 'text-zinc-500'}`}>

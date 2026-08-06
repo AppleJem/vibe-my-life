@@ -30,6 +30,8 @@ function HabitDetailPage() {
   const [logError, setLogError] = useState<string | null>(null)
 
   const today = localToday()
+  const [isDone, setIsDone] = useState<boolean>(completions.some((completion) => completion.date === today));
+
 
   if (notFound) {
     return (
@@ -55,7 +57,6 @@ function HabitDetailPage() {
   }
 
   const accent = accentOf(habit.color)
-  const isDone = completions.some((completion) => completion.date === today)
 
   const submitLog = async (input: Omit<CreateCompletionInput, 'date'>) => {
     setIsSaving(true)
@@ -78,6 +79,7 @@ function HabitDetailPage() {
   }
 
   const handleHoldComplete = () => {
+    setIsDone(true)
     if (habit.type === 'boolean') {
       void submitLog({})
       return

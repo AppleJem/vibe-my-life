@@ -158,7 +158,7 @@ export function normaliseTag(raw: string): string {
 }
 
 export interface HabitSection {
-  /** `null` is the ungrouped remainder, which renders without a header. */
+  /** `null` is the ungrouped remainder, which the list page heads with "Ungrouped". */
   group: HabitGroup | null
   members: Habit[]
 }
@@ -188,7 +188,7 @@ export function orderMembers(members: Habit[], habitIds: string[]): Habit[] {
 
 /**
  * The list page's sections: named groups in name order, each with its members in the
- * group's own order, and everything ungrouped trailing in one headerless section.
+ * group's own order, and everything ungrouped trailing in one section of its own.
  *
  * A group with no members is dropped — an empty heading is noise on the list page, and the
  * group is still reachable and repopulatable from the habit form.
