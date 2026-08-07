@@ -22,8 +22,17 @@ export const Route = createFileRoute('/_authenticated/habits/$habitId')({
 function HabitDetailPage() {
   const { habitId } = Route.useParams()
   const navigate = useNavigate()
-  const { habit, completions, loading, notFound, log, unlog, updateHabit, deleteHabit } =
-    useHabit(habitId)
+  const {
+    habit,
+    completions,
+    loading,
+    notFound,
+    log,
+    unlog,
+    editCompletion,
+    updateHabit,
+    deleteHabit,
+  } = useHabit(habitId)
 
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -213,7 +222,12 @@ function HabitDetailPage() {
           </section>
         )}
 
-        <HistoryList habit={habit} completions={completions} onDelete={unlog} />
+        <HistoryList
+          habit={habit}
+          completions={completions}
+          onDelete={unlog}
+          onEdit={(timestamp, input) => editCompletion({ timestamp, input })}
+        />
       </div>
 
       <ConfirmDialog

@@ -5,6 +5,11 @@ import type { Habit } from '../../types/habit'
 interface DurationEditorProps {
   habit: Habit
   isSaving: boolean
+  /** Seeds the sheet when correcting an existing log; a fresh log starts at the target. */
+  initialMinutes?: number
+  initialNotes?: string
+  /** "Log it" when logging, "Save" when editing. */
+  confirmLabel?: string
   onConfirm: (minutes: number, notes: string) => void
   onCancel: () => void
 }
@@ -19,10 +24,18 @@ const clock = (seconds: number) =>
  * done, or run the stopwatch for something happening now — stopping it rounds up to the
  * next whole minute, since a 4:10 sit is a 5-minute sit and logging 4 reads as a failure.
  */
-export function DurationEditor({ habit, isSaving, onConfirm, onCancel }: DurationEditorProps) {
+export function DurationEditor({
+  habit,
+  isSaving,
+  initialMinutes,
+  initialNotes,
+  confirmLabel = 'Log it',
+  onConfirm,
+  onCancel,
+}: DurationEditorProps) {
   const accent = accentOf(habit.color)
-  const [minutes, setMinutes] = useState(habit.target ?? 10)
-  const [notes, setNotes] = useState('')
+  const [minutes, setMinutes] = useState(initialMinutes ?? habit.target ?? 10)
+  const [notes, setNotes] = useState(initialNotes ?? '')
   const [elapsed, setElapsed] = useState<number | null>(null)
 
   const startedAtRef = useRef<number | null>(null)
@@ -124,7 +137,7 @@ export function DurationEditor({ habit, isSaving, onConfirm, onCancel }: Duratio
             style={accent.solid}
             className="flex-1 rounded-xl py-3 text-sm font-semibold text-zinc-950 disabled:opacity-50"
           >
-            {isSaving ? 'Saving…' : 'Log it'}
+            {isSaving ? 'Saving…' : confirmLabel}
           </button>
         </div>
       </div>

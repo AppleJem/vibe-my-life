@@ -5,6 +5,11 @@ import type { Habit } from '../../types/habit'
 interface CountEditorProps {
   habit: Habit
   isSaving: boolean
+  /** Seeds the sheet when correcting an existing log; a fresh log starts at the target. */
+  initialCount?: number
+  initialNotes?: string
+  /** "Log it" when logging, "Save" when editing. */
+  confirmLabel?: string
   onConfirm: (count: number, notes: string) => void
   onCancel: () => void
 }
@@ -16,10 +21,18 @@ const QUICK_ADD = [1, 5, 10]
  * target when it has one — the common case is "I did the thing as planned", and typing
  * should be for the exception.
  */
-export function CountEditor({ habit, isSaving, onConfirm, onCancel }: CountEditorProps) {
+export function CountEditor({
+  habit,
+  isSaving,
+  initialCount,
+  initialNotes,
+  confirmLabel = 'Log it',
+  onConfirm,
+  onCancel,
+}: CountEditorProps) {
   const accent = accentOf(habit.color)
-  const [count, setCount] = useState(habit.target ?? 1)
-  const [notes, setNotes] = useState('')
+  const [count, setCount] = useState(initialCount ?? habit.target ?? 1)
+  const [notes, setNotes] = useState(initialNotes ?? '')
 
   const unit = habit.unit ?? ''
 
@@ -91,7 +104,7 @@ export function CountEditor({ habit, isSaving, onConfirm, onCancel }: CountEdito
             style={accent.solid}
             className="flex-1 rounded-xl py-3 text-sm font-semibold text-zinc-950 disabled:opacity-50"
           >
-            {isSaving ? 'Saving…' : 'Log it'}
+            {isSaving ? 'Saving…' : confirmLabel}
           </button>
         </div>
       </div>

@@ -62,6 +62,34 @@ const createCompletionSchema = z.object({
 type CompletionBody = z.infer<typeof createCompletionSchema>
 
 /**
+ * An edit corrects a value or a note on a completion that already exists. Every field is
+ * optional — changing only the note leaves the value alone — but `date` is not among
+ * them: it is part of the sort key and the subject of the one-per-day rule.
+ */
+const updateCompletionSchema = z.object({
+  notes: z.string().optional(),
+  count: z.number().positive().optional(),
+  durationMinutes: z.number().positive().optional(),
+})
+
+type UpdateCompletionBody = z.infer<typeof updateCompletionSchema>
+
+/**
+ * The type check for an edit, which differs from a create: a count habit's completion
+ * must already carry a count, so omitting it here means "leave it alone" rather than
+ * "log without a value". Only the wrong *kind* of value is an error.
+ */
+function validateUpdateValue(type: HabitType, body: UpdateCompletionBody): string | null {
+  if (type !== 'count' && body.count !== undefined) {
+    return 'count is not valid for a non-count habit'
+  }
+  if (type !== 'duration' && body.durationMinutes !== undefined) {
+    return 'durationMinutes is not valid for a non-duration habit'
+  }
+  return null
+}
+
+/**
  * The value a completion carries depends on the habit's type, which lives in the stored
  * definition rather than the request — so this runs after the habit is fetched, not as
  * part of the zod schema. Returns an error message, or null when the body is valid.
@@ -259,6 +287,39 @@ export const habitController = {
     } catch (err) {
       console.error('Error creating completion:', err)
       return res.status(500).json({ error: 'Failed to create completion' })
+    }
+  },
+
+  async updateCompletion(req: Request, res: Response) {
+    const habitId = req.params.id as string
+    const timestamp = req.params.timestamp as string
+
+    const parsed = updateCompletionSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() })
+    }
+
+    try {
+      const habit = await habitModel.getHabit(req.userId!, habitId)
+      if (!habit) return res.status(404).json({ error: 'Habit not found' })
+
+      const invalid = validateUpdateValue(habit.type, parsed.data)
+      if (invalid) return res.status(400).json({ error: invalid })
+
+      const completion = await habitModel.updateCompletion(
+        req.userId!,
+        habitId,
+        timestamp,
+        parsed.data
+      )
+      if (!completion) return res.status(404).json({ error: 'Completion not found' })
+
+      // No watermark work: an edit can't move a completion to another day, so
+      // `lastCompletedDate` is unaffected by definition.
+      return res.json({ completion })
+    } catch (err) {
+      console.error('Error updating completion:', err)
+      return res.status(500).json({ error: 'Failed to update completion' })
     }
   },
 

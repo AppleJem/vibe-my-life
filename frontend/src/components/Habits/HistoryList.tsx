@@ -1,22 +1,33 @@
 import { useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { CountEditor } from './CountEditor'
+import { DurationEditor } from './DurationEditor'
+import { NoteEditor } from './NoteEditor'
 import { formatShortDate, formatValue } from '../../utils/habit'
-import type { Completion, Habit } from '../../types/habit'
+import type { Completion, Habit, UpdateCompletionInput } from '../../types/habit'
 
 interface HistoryListProps {
   habit: Habit
   completions: Completion[]
   onDelete: (timestamp: string) => Promise<unknown>
+  /** Absent leaves the list delete-only. */
+  onEdit?: (timestamp: string, input: UpdateCompletionInput) => Promise<unknown>
 }
 
 /**
- * Reverse-chronological log, and the only place a completion can be removed — the big
- * box goes inert once a day is logged, so undo deliberately lives down here rather than
- * under the same gesture that created it.
+ * Reverse-chronological log, and the only place a completion can be corrected or removed
+ * — the big box goes inert once a day is logged, so both live down here rather than under
+ * the same gesture that created it.
+ *
+ * An edit reopens the sheet the completion was logged with, seeded with what it holds
+ * now. The day itself isn't editable: it's the subject of the one-per-day rule, so moving
+ * a completion means removing it and logging the other day.
  */
-export function HistoryList({ habit, completions, onDelete }: HistoryListProps) {
+export function HistoryList({ habit, completions, onDelete, onEdit }: HistoryListProps) {
   const [pending, setPending] = useState<Completion | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [editing, setEditing] = useState<Completion | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   const ordered = [...completions].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 
@@ -29,6 +40,18 @@ export function HistoryList({ habit, completions, onDelete }: HistoryListProps) 
       setPending(null)
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  const saveEdit = async (input: UpdateCompletionInput) => {
+    if (!editing || !onEdit) return
+
+    setIsSaving(true)
+    try {
+      await onEdit(editing.timestamp, input)
+      setEditing(null)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -55,6 +78,18 @@ export function HistoryList({ habit, completions, onDelete }: HistoryListProps) 
                   <p className="text-xs text-zinc-500 truncate">{completion.notes}</p>
                 )}
               </div>
+
+              {onEdit && (
+                <button
+                  onClick={() => setEditing(completion)}
+                  className="text-zinc-600 hover:text-zinc-300 transition-colors p-1"
+                  aria-label={`Edit ${completion.date}`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              )}
 
               <button
                 onClick={() => setPending(completion)}
@@ -83,6 +118,40 @@ export function HistoryList({ habit, completions, onDelete }: HistoryListProps) 
         onConfirm={confirmDelete}
         onCancel={() => setPending(null)}
       />
+
+      {editing && habit.type === 'count' && (
+        <CountEditor
+          habit={habit}
+          isSaving={isSaving}
+          initialCount={editing.count}
+          initialNotes={editing.notes}
+          confirmLabel="Save"
+          onConfirm={(count, notes) => void saveEdit({ count, notes })}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {editing && habit.type === 'duration' && (
+        <DurationEditor
+          habit={habit}
+          isSaving={isSaving}
+          initialMinutes={editing.durationMinutes}
+          initialNotes={editing.notes}
+          confirmLabel="Save"
+          onConfirm={(durationMinutes, notes) => void saveEdit({ durationMinutes, notes })}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {editing && habit.type === 'boolean' && (
+        <NoteEditor
+          habit={habit}
+          isSaving={isSaving}
+          initialNotes={editing.notes}
+          onConfirm={(notes) => void saveEdit({ notes })}
+          onCancel={() => setEditing(null)}
+        />
+      )}
     </section>
   )
 }

@@ -14,6 +14,7 @@ import type {
   UpdateHabitInput,
   Completion,
   CreateCompletionInput,
+  UpdateCompletionInput,
   HabitGroup,
   CreateHabitGroupInput,
   UpdateHabitGroupInput,
@@ -294,6 +295,19 @@ export const habitApi = {
   ): Promise<{ completion: Completion; habit: Habit }> {
     const { data } = await api.post(`/habits/${habitId}/completions`, input)
     return data
+  },
+
+  /** Corrects a logged value or note. The day itself is not editable. */
+  async updateCompletion(
+    habitId: string,
+    timestamp: string,
+    input: UpdateCompletionInput
+  ): Promise<Completion> {
+    const { data } = await api.put(
+      `/habits/${habitId}/completions/${encodeURIComponent(timestamp)}`,
+      input
+    )
+    return data.completion
   },
 
   /** The timestamp is an ISO string, so it has to be escaped into the path. */

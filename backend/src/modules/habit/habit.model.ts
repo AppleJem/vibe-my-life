@@ -14,6 +14,7 @@ import type {
   UpdateHabitInput,
   Completion,
   CreateCompletionInput,
+  UpdateCompletionInput,
   HabitGroup,
   CreateHabitGroupInput,
   UpdateHabitGroupInput,
@@ -321,6 +322,57 @@ export const habitModel = {
     }))
 
     return completion
+  },
+
+  /**
+   * Corrects a logged value or note in place. Returns null when the completion is gone,
+   * so a stale history row reports 404 instead of resurrecting a deleted log as a fresh
+   * item with no `date` — the condition is what makes the update a true update.
+   */
+  async updateCompletion(
+    userId: string,
+    habitId: string,
+    timestamp: string,
+    updates: UpdateCompletionInput
+  ): Promise<Completion | null> {
+    const UPDATABLE = ['notes', 'count', 'durationMinutes'] as const
+
+    const setExpressions: string[] = []
+    const values: Record<string, unknown> = {}
+    const names: Record<string, string> = {}
+
+    for (const field of UPDATABLE) {
+      const value = updates[field]
+      if (value === undefined) continue
+
+      names[`#${field}`] = field
+      setExpressions.push(`#${field} = :${field}`)
+      values[`:${field}`] = value
+    }
+
+    if (setExpressions.length === 0) {
+      const existing = await docClient.send(new GetCommand({
+        TableName: HABIT_TABLE_NAME,
+        Key: completionKey(userId, habitId, timestamp),
+      }))
+      return (existing.Item as Completion) ?? null
+    }
+
+    try {
+      const result = await docClient.send(new UpdateCommand({
+        TableName: HABIT_TABLE_NAME,
+        Key: completionKey(userId, habitId, timestamp),
+        UpdateExpression: `SET ${setExpressions.join(', ')}`,
+        ExpressionAttributeNames: names,
+        ExpressionAttributeValues: values,
+        ConditionExpression: 'attribute_exists(SK)',
+        ReturnValues: 'ALL_NEW',
+      }))
+      return (result.Attributes as Completion) ?? null
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name === 'ConditionalCheckFailedException') return null
+      throw err
+    }
   },
 
   async deleteCompletion(userId: string, habitId: string, timestamp: string): Promise<void> {

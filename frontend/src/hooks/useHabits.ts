@@ -6,6 +6,7 @@ import { localToday } from '../utils/recurring'
 import type {
   Completion,
   CreateCompletionInput,
+  UpdateCompletionInput,
   CreateHabitInput,
   CreateHabitGroupInput,
   UpdateHabitInput,
@@ -191,6 +192,12 @@ export function useHabit(habitId: string) {
     onSuccess: invalidate,
   })
 
+  const editCompletionMutation = useMutation({
+    mutationFn: ({ timestamp, input }: { timestamp: string; input: UpdateCompletionInput }) =>
+      habitApi.updateCompletion(habitId, timestamp, input),
+    onSuccess: invalidate,
+  })
+
   const updateMutation = useMutation({
     mutationFn: (input: UpdateHabitInput) => habitApi.update(habitId, input),
     onSuccess: invalidate,
@@ -209,6 +216,7 @@ export function useHabit(habitId: string) {
     error: completionsQuery.error ? 'Failed to load history' : null,
     log: logMutation.mutateAsync,
     unlog: unlogMutation.mutateAsync,
+    editCompletion: editCompletionMutation.mutateAsync,
     updateHabit: updateMutation.mutateAsync,
     deleteHabit: deleteMutation.mutateAsync,
   }

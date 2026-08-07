@@ -127,3 +127,14 @@ export interface CreateCompletionInput {
   count?: number
   durationMinutes?: number
 }
+
+/**
+ * What a completion can be corrected to after the fact. `date` is deliberately absent:
+ * it is part of the sort key and the subject of the one-per-day rule, so moving a
+ * completion to another day is a delete and a re-log, not an edit.
+ */
+export interface UpdateCompletionInput {
+  notes?: string
+  count?: number
+  durationMinutes?: number
+}
