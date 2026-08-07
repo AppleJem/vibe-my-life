@@ -5,9 +5,21 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   cancelLabel?: string
   isConfirming?: boolean
+  /** Shown in place of `confirmLabel` while the action is in flight. */
+  confirmingLabel?: string
+  /**
+   * `danger` is the red destructive button this dialog was built for. `primary` is for
+   * prompts that confirm something additive, like backfilling a habit day.
+   */
+  tone?: 'danger' | 'primary'
   onConfirm: () => void
   onCancel: () => void
 }
+
+const TONES = {
+  danger: 'bg-red-500 hover:bg-red-400',
+  primary: 'bg-pink-500 hover:bg-pink-400',
+} as const
 
 export function ConfirmDialog({
   isOpen,
@@ -16,6 +28,8 @@ export function ConfirmDialog({
   confirmLabel = 'Delete',
   cancelLabel = 'Cancel',
   isConfirming = false,
+  confirmingLabel = 'Deleting…',
+  tone = 'danger',
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -46,9 +60,9 @@ export function ConfirmDialog({
           <button
             onClick={onConfirm}
             disabled={isConfirming}
-            className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white hover:bg-red-400 disabled:opacity-50"
+            className={`flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${TONES[tone]}`}
           >
-            {isConfirming ? 'Deleting…' : confirmLabel}
+            {isConfirming ? confirmingLabel : confirmLabel}
           </button>
         </div>
       </div>

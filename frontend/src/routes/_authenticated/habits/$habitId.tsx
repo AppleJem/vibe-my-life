@@ -7,10 +7,12 @@ import { DurationEditor } from '../../../components/Habits/DurationEditor'
 import { HabitHeatmap } from '../../../components/Habits/HabitHeatmap'
 import { HistoryList } from '../../../components/Habits/HistoryList'
 import { HabitForm } from '../../../components/Habits/HabitForm'
+import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { accentOf } from '../../../constants/habitColors'
 import { useHabit } from '../../../hooks/useHabits'
 import { localToday } from '../../../utils/recurring'
-import { currentStreak, longestStreak } from '../../../utils/habit'
+import { currentStreak, longestStreak, formatShortDate } from '../../../utils/habit'
+import { playCompletionKlang } from '../../../utils/sounds'
 import type { CreateCompletionInput, CreateHabitInput } from '../../../types/habit'
 
 export const Route = createFileRoute('/_authenticated/habits/$habitId')({
@@ -25,13 +27,20 @@ function HabitDetailPage() {
 
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  /** Which value editor the hold opened, if any. */
-  const [editorOpen, setEditorOpen] = useState(false)
+  /**
+   * The day the open value editor is logging for — today from the big check box, or an
+   * older day picked out of the heatmap. Null means no editor is open.
+   */
+  const [editorDate, setEditorDate] = useState<string | null>(null)
+  /** A heatmap day waiting on the backfill confirmation. */
+  const [pendingDate, setPendingDate] = useState<string | null>(null)
   const [logError, setLogError] = useState<string | null>(null)
 
   const today = localToday()
-  const [isDone, setIsDone] = useState<boolean>(completions.some((completion) => completion.date === today));
-
+  const [isDone, setIsDone] = useState<boolean>(
+    completions.some((completion) => completion.date === today)
+  )
+  const editorOpen = editorDate !== null
 
   if (notFound) {
     return (
@@ -58,19 +67,21 @@ function HabitDetailPage() {
 
   const accent = accentOf(habit.color)
 
-  const submitLog = async (input: Omit<CreateCompletionInput, 'date'>) => {
+  const submitLog = async (input: Omit<CreateCompletionInput, 'date'>, date: string) => {
     setIsSaving(true)
     setLogError(null)
     try {
-      await log({ date: today, ...input })
-      setEditorOpen(false)
+      await log({ date, ...input })
+      setEditorDate(null)
     } catch (err) {
-      // A 409 means another tab (or a stale render) already logged today — worth
+      // A 409 means another tab (or a stale render) already logged that day — worth
       // saying plainly rather than as a generic failure, since the box is about to
       // go inert and look like it worked.
+      const already =
+        date === today ? 'Already logged for today.' : `Already logged for ${formatShortDate(date)}.`
       setLogError(
         axios.isAxiosError(err) && err.response?.status === 409
-          ? 'Already logged for today.'
+          ? already
           : 'Could not save that. Try again.'
       )
     } finally {
@@ -78,14 +89,29 @@ function HabitDetailPage() {
     }
   }
 
-  const handleHoldComplete = () => {
-    setIsDone(true)
+  /** Boolean habits log immediately; the other two need a value first. */
+  const beginLog = (date: string) => {
+    // The optimistic flip is today's box only — backfilling an older day must not
+    // make today read as done.
+    if (date === today) setIsDone(true)
+
     if (habit.type === 'boolean') {
-      void submitLog({})
+      void submitLog({}, date)
       return
     }
     setLogError(null)
-    setEditorOpen(true)
+    setEditorDate(date)
+  }
+
+  const handleHoldComplete = () => beginLog(today)
+
+  const handleConfirmBackdate = () => {
+    if (!pendingDate) return
+    // Same order as the big check box: the reward sound fires on the commitment, not
+    // on the round trip, so a count habit hears it as its editor opens.
+    playCompletionKlang()
+    beginLog(pendingDate)
+    setPendingDate(null)
   }
 
   const handleSaveEdits = async (input: CreateHabitInput) => {
@@ -166,7 +192,12 @@ function HabitDetailPage() {
         {loading ? (
           <div className="h-24 bg-zinc-800 rounded-xl animate-pulse" />
         ) : (
-          <HabitHeatmap habit={habit} completions={completions} today={today} />
+          <HabitHeatmap
+            habit={habit}
+            completions={completions}
+            today={today}
+            onBackdate={setPendingDate}
+          />
         )}
 
         {(habit.tags.length > 0 || habit.description) && (
@@ -185,12 +216,22 @@ function HabitDetailPage() {
         <HistoryList habit={habit} completions={completions} onDelete={unlog} />
       </div>
 
+      <ConfirmDialog
+        isOpen={pendingDate !== null}
+        tone="primary"
+        title={`Log ${habit.name} for ${pendingDate ? formatShortDate(pendingDate) : ''}?`}
+        message="This backdates the completion to that day."
+        confirmLabel="Yes, log it"
+        onConfirm={handleConfirmBackdate}
+        onCancel={() => setPendingDate(null)}
+      />
+
       {editorOpen && habit.type === 'count' && (
         <CountEditor
           habit={habit}
           isSaving={isSaving}
-          onConfirm={(count, notes) => void submitLog({ count, notes })}
-          onCancel={() => setEditorOpen(false)}
+          onConfirm={(count, notes) => void submitLog({ count, notes }, editorDate!)}
+          onCancel={() => setEditorDate(null)}
         />
       )}
 
@@ -198,8 +239,10 @@ function HabitDetailPage() {
         <DurationEditor
           habit={habit}
           isSaving={isSaving}
-          onConfirm={(durationMinutes, notes) => void submitLog({ durationMinutes, notes })}
-          onCancel={() => setEditorOpen(false)}
+          onConfirm={(durationMinutes, notes) =>
+            void submitLog({ durationMinutes, notes }, editorDate!)
+          }
+          onCancel={() => setEditorDate(null)}
         />
       )}
     </>
