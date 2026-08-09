@@ -42,6 +42,8 @@ const toMetadata = (item: Record<string, unknown>): ExpenseMetadata => ({
     : item.incomeCategories) as Category[],
   baseCurrency: (item.baseCurrency ?? DEFAULT_BASE_CURRENCY) as string,
   currencies: (item.currencies ?? []) as string[],
+  // Absent means "no budget set", same as an explicit 0 — nothing to seed either way.
+  monthlyBudget: (item.monthlyBudget ?? 0) as number,
   recurring: (item.recurring ?? []) as RecurringRule[],
   updatedAt: (item.updatedAt ?? '') as string,
 })

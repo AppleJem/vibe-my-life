@@ -14,6 +14,11 @@ export interface ExpenseMetadata {
   /** Additional currencies the user can spend in. Never includes baseCurrency. */
   currencies: string[]
   /**
+   * Spending cap for a calendar month, in `baseCurrency`. `0` means "no budget" and is
+   * what an unset item reads as, so the dashboard has a single falsy check to make.
+   */
+  monthlyBudget: number
+  /**
    * Subscription / salary schedules. Unlike `incomeCategories`, absent and `[]` mean the
    * same thing — there is nothing to seed, so a plain `?? []` read default is correct.
    */
@@ -32,5 +37,6 @@ export interface MetadataPatch {
   incomeCategories?: Category[]
   baseCurrency?: string
   currencies?: string[]
+  monthlyBudget?: number
   recurring?: RecurringRule[]
 }

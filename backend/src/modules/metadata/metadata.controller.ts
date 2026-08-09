@@ -37,6 +37,16 @@ const saveCurrencySchema = z.object({
     .refine(hasNoDuplicates, 'Currencies must be unique'),
 })
 
+// 0 clears the budget. The cap is a sanity bound, not a product limit — it exists so a
+// fat-fingered paste can't be stored as a budget nothing will ever exceed.
+const saveBudgetSchema = z.object({
+  monthlyBudget: z
+    .number()
+    .finite()
+    .min(0, 'Budget cannot be negative')
+    .max(1_000_000_000, 'Budget is unrealistically large'),
+})
+
 const categoryList = z
   .array(categorySchema)
   .refine((cats) => hasNoDuplicates(cats.map((c) => c.name)), 'Category names must be unique')
@@ -142,6 +152,24 @@ export const metadataController = {
     } catch (err) {
       console.error('Error saving currency settings:', err)
       return res.status(500).json({ error: 'Failed to save currency settings' })
+    }
+  },
+
+  async saveBudget(req: Request, res: Response) {
+    const parsed = saveBudgetSchema.safeParse(req.body)
+
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() })
+    }
+
+    try {
+      const metadata = await metadataModel.patch(req.userId!, {
+        monthlyBudget: parsed.data.monthlyBudget,
+      })
+      return res.json({ metadata })
+    } catch (err) {
+      console.error('Error saving budget:', err)
+      return res.status(500).json({ error: 'Failed to save budget' })
     }
   },
 }

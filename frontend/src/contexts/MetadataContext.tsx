@@ -38,7 +38,19 @@ interface CurrencyValue {
   setInputCurrency: (code: string) => void
 }
 
-interface MetadataContextValue extends CategoriesValue, CurrencyValue {}
+interface BudgetValue {
+  /**
+   * Monthly spending cap in `baseCurrency`. `0` means the user hasn't set one — every
+   * consumer treats it as "no budget" rather than "a budget of nothing".
+   */
+  monthlyBudget: number
+  loading: boolean
+  error: string | null
+  /** Pass 0 to clear the budget. */
+  saveBudget: (monthlyBudget: number) => Promise<void>
+}
+
+interface MetadataContextValue extends CategoriesValue, CurrencyValue, BudgetValue {}
 
 const MetadataContext = createContext<MetadataContextValue | null>(null)
 
@@ -56,6 +68,7 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
     useState<Category[]>(DEFAULT_INCOME_CATEGORIES)
   const [baseCurrency, setBaseCurrency] = useState(DEFAULT_BASE_CURRENCY)
   const [extraCurrencies, setExtraCurrencies] = useState<string[]>([])
+  const [monthlyBudget, setMonthlyBudget] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -79,6 +92,7 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
         setIncomeCategories(metadata.incomeCategories)
         setBaseCurrency(metadata.baseCurrency)
         setExtraCurrencies(metadata.currencies)
+        setMonthlyBudget(metadata.monthlyBudget ?? 0)
       })
       .catch((err) => {
         console.error(err)
@@ -138,6 +152,7 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
     setIncomeCategories(metadata.incomeCategories)
     setBaseCurrency(metadata.baseCurrency)
     setExtraCurrencies(metadata.currencies)
+    setMonthlyBudget(metadata.monthlyBudget ?? 0)
   }, [])
 
   const saveCategories = useCallback(async (payload: SaveCategoriesPayload) => {
@@ -150,6 +165,11 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
     const metadata = await metadataApi.saveCurrency(nextBase, nextCurrencies)
     setBaseCurrency(metadata.baseCurrency)
     setExtraCurrencies(metadata.currencies)
+  }, [])
+
+  const saveBudget = useCallback(async (next: number) => {
+    const metadata = await metadataApi.saveBudget(next)
+    setMonthlyBudget(metadata.monthlyBudget ?? 0)
   }, [])
 
   return (
@@ -169,6 +189,8 @@ export function MetadataProvider({ children }: { children: React.ReactNode }) {
         saveCurrency,
         inputCurrency,
         setInputCurrency,
+        monthlyBudget,
+        saveBudget,
       }}
     >
       {children}
@@ -187,5 +209,9 @@ export function useCategories(): CategoriesValue {
 }
 
 export function useCurrency(): CurrencyValue {
+  return useMetadata()
+}
+
+export function useBudget(): BudgetValue {
   return useMetadata()
 }

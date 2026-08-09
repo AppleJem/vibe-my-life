@@ -41,6 +41,8 @@ export interface ExpenseMetadata {
   baseCurrency: string
   /** Additional currencies; never includes baseCurrency. */
   currencies: string[]
+  /** Monthly spending cap in baseCurrency. 0 means no budget is set. */
+  monthlyBudget: number
   updatedAt: string
 }
 
@@ -352,6 +354,12 @@ export const metadataApi = {
 
   async saveCurrency(baseCurrency: string, currencies: string[]): Promise<ExpenseMetadata> {
     const { data } = await api.put('/metadata/currency', { baseCurrency, currencies })
+    return data.metadata
+  },
+
+  /** `0` clears the budget — the progress bar disappears rather than reading 0% left. */
+  async saveBudget(monthlyBudget: number): Promise<ExpenseMetadata> {
+    const { data } = await api.put('/metadata/budget', { monthlyBudget })
     return data.metadata
   },
 }

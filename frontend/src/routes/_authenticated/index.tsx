@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { MonthHeader } from '../../components/ExpenseTracker/MonthHeader'
+import { BudgetProgress } from '../../components/ExpenseTracker/BudgetProgress'
 import { ExpenseList } from '../../components/ExpenseTracker/ExpenseList'
 import { SwipeContainer } from '../../components/ExpenseTracker/SwipeContainer'
 import { AddExpenseModal } from '../../components/ExpenseTracker/AddExpenseModal/AddExpenseModal'
@@ -13,7 +14,7 @@ import { splitByType, sumOf } from '../../utils/transaction'
 import { priceInBase } from '../../utils/currency'
 import { getRates } from '../../services/rates'
 import { screenshotApi, voiceApi, type ParsedExpenseItem } from '../../services/api'
-import { useCategories, useCurrency } from '../../contexts/MetadataContext'
+import { useBudget, useCategories, useCurrency } from '../../contexts/MetadataContext'
 import type { CreateExpenseInput, UpdateExpenseInput, Expense } from '../../types/expense'
 
 // Lazy-load CategoryBreakdown — it pulls in recharts (~200KB)
@@ -44,6 +45,7 @@ function DashboardPage() {
   const { expenses, loading, deleteExpense, addExpense, updateExpense } = useExpenses(yearMonth)
   const { categories, incomeCategories } = useCategories()
   const { baseCurrency, currencies, rates } = useCurrency()
+  const { monthlyBudget } = useBudget()
 
   /**
    * Prices parsed items into the base currency. The rate fetch happens here, after
@@ -202,6 +204,9 @@ function DashboardPage() {
           onPrevious={goToPreviousMonth}
           onNext={goToNextMonth}
         />
+
+        {/* Budget is against money out, so it tracks `expenseTotal`, not the net. */}
+        <BudgetProgress spent={expenseTotal} budget={monthlyBudget} yearMonth={yearMonth} />
 
         {view === 'list' ? (
           <ExpenseList
