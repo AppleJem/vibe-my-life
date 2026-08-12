@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
+import { useLocalStorage } from '../../../hooks/useLocalStorage'
 import { HabitForm } from '../../../components/Habits/HabitForm'
 import { MAX_DAYS, WeekStrip } from '../../../components/Habits/WeekStrip'
 import { useHabits, useRecentCompletions } from '../../../hooks/useHabits'
@@ -21,17 +22,18 @@ function HabitsPage() {
   const { byHabit } = useRecentCompletions(MAX_DAYS)
   const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const [collapsed, setCollapsed] = useLocalStorage<string[]>('habits:collapsedGroups', [])
+  const collapsedSet = useMemo(() => new Set(collapsed), [collapsed])
 
   const today = localToday()
   const sections = useMemo(() => groupHabits(habits, groups), [habits, groups])
 
   const toggleCollapsed = (key: string) =>
-    setCollapsed((current) => {
-      const next = new Set(current)
-      if (!next.delete(key)) next.add(key)
-      return next
-    })
+    setCollapsed((current) =>
+      current.includes(key)
+        ? current.filter((k) => k !== key)
+        : [...current, key],
+    )
 
   const handleCreate = async (input: CreateHabitInput) => {
     setIsSaving(true)
@@ -89,7 +91,7 @@ function HabitsPage() {
         <div className="space-y-6">
           {sections.map(({ group, members }) => {
             const key = group?.id ?? UNGROUPED_KEY
-            const isCollapsed = collapsed.has(key)
+            const isCollapsed = collapsedSet.has(key)
 
             return (
               <section key={key}>
