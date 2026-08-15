@@ -9,7 +9,12 @@ import { ViewTabs, type DashboardView } from '../../components/ExpenseTracker/Vi
 import { ImagePickerButton } from '../../components/ExpenseTracker/ImagePickerButton'
 import { VoiceRecorderButton } from '../../components/ExpenseTracker/VoiceRecorderButton'
 import { ScreenshotLoadingOverlay } from '../../components/ExpenseTracker/ScreenshotLoadingOverlay'
+import { SearchBar } from '../../components/ExpenseTracker/SearchBar'
+import { SearchResults } from '../../components/ExpenseTracker/SearchResults'
 import { useExpenses } from '../../hooks/useExpenses'
+import { useDebounce } from '../../hooks/useDebounce'
+import { useExpenseSearch } from '../../hooks/useExpenseSearch'
+import { Layout } from '../../components/Layout'
 import { splitByType, sumOf } from '../../utils/transaction'
 import { priceInBase } from '../../utils/currency'
 import { getRates } from '../../services/rates'
@@ -28,6 +33,13 @@ export const Route = createFileRoute('/_authenticated/')({
   component: DashboardPage,
 })
 
+/** Returns YYYY-MM for the current month minus `monthsAgo` months. */
+function monthsAgo(monthsAgo: number): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() - monthsAgo)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 function DashboardPage() {
   const navigate = useNavigate()
   const [yearMonth, setYearMonth] = useState(() => {
@@ -41,6 +53,14 @@ function DashboardPage() {
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Search state
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchStartMonth, setSearchStartMonth] = useState(() => monthsAgo(2))
+  const [searchEndMonth, setSearchEndMonth] = useState(() => monthsAgo(0))
+
+  const debouncedQuery = useDebounce(searchQuery, 300)
 
   const { expenses, loading, deleteExpense, addExpense, updateExpense } = useExpenses(yearMonth)
   const { categories, incomeCategories } = useCategories()
@@ -70,6 +90,18 @@ function DashboardPage() {
     },
     [baseCurrency, rates]
   )
+
+  const {
+    results: searchResults,
+    isSearching,
+    loadedCount,
+    totalCount,
+  } = useExpenseSearch({
+    enabled: isSearchOpen,
+    startMonth: searchStartMonth,
+    endMonth: searchEndMonth,
+    query: debouncedQuery,
+  })
 
   // One query returns the whole month, both directions; the split is a render concern.
   const split = splitByType(expenses)
@@ -194,69 +226,111 @@ function DashboardPage() {
     setShowVoiceRecorder(false)
   }, [])
 
+  const handleToggleSearch = useCallback(() => {
+    setIsSearchOpen((prev) => {
+      if (!prev) {
+        // Opening search — reset to default range
+        setSearchStartMonth(monthsAgo(2))
+        setSearchEndMonth(monthsAgo(0))
+        setSearchQuery('')
+      }
+      return !prev
+    })
+  }, [])
+
+  const searchContent = (
+    <SearchBar
+      query={searchQuery}
+      startMonth={searchStartMonth}
+      endMonth={searchEndMonth}
+      onQueryChange={setSearchQuery}
+      onStartMonthChange={setSearchStartMonth}
+      onEndMonthChange={setSearchEndMonth}
+      onClose={handleToggleSearch}
+    />
+  )
+
   return (
-    <>
-      <SwipeContainer onSwipeLeft={goToNextMonth} onSwipeRight={goToPreviousMonth}>
-        <MonthHeader
-          yearMonth={yearMonth}
-          income={incomeTotal}
-          expense={expenseTotal}
-          onPrevious={goToPreviousMonth}
-          onNext={goToNextMonth}
+    <Layout
+      showSearch={isSearchOpen}
+      onSearchToggle={handleToggleSearch}
+      searchContent={searchContent}
+    >
+      {isSearchOpen ? (
+        <SearchResults
+          expenses={searchResults}
+          loading={isSearching}
+          loadedCount={loadedCount}
+          totalCount={totalCount}
+          query={debouncedQuery}
+          onDelete={deleteExpense}
+          onExpenseClick={handleExpenseClick}
         />
-
-        {/* Budget is against money out, so it tracks `expenseTotal`, not the net. */}
-        <BudgetProgress spent={expenseTotal} budget={monthlyBudget} yearMonth={yearMonth} />
-
-        {view === 'list' ? (
-          <ExpenseList
-            expenses={expenses}
-            loading={loading}
-            onDelete={deleteExpense}
-            onExpenseClick={handleExpenseClick}
-          />
-        ) : (
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center py-20">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-500 border-t-pink-500" />
-              </div>
-            }
-          >
-            <CategoryBreakdown
-              expenses={expenses}
-              loading={loading}
-              onDelete={deleteExpense}
-              onExpenseClick={handleExpenseClick}
+      ) : (
+        <>
+          <SwipeContainer onSwipeLeft={goToNextMonth} onSwipeRight={goToPreviousMonth}>
+            <MonthHeader
+              yearMonth={yearMonth}
+              income={incomeTotal}
+              expense={expenseTotal}
+              onPrevious={goToPreviousMonth}
+              onNext={goToNextMonth}
             />
-          </Suspense>
-        )}
-      </SwipeContainer>
 
-      {/* Loading overlay for screenshot parsing */}
-      {isParsingScreenshots && (
-        <ScreenshotLoadingOverlay
-          onCancel={handleCancelParsing}
-          imageCount={selectedImages.length}
-        />
-      )}
+            {/* Budget is against money out, so it tracks `expenseTotal`, not the net. */}
+            <BudgetProgress spent={expenseTotal} budget={monthlyBudget} yearMonth={yearMonth} />
 
-      {/* FAB - Add expense (with long press for image/voice picker) */}
-      <ImagePickerButton
-        onImagesSelected={handleImagesSelected}
-        onVoiceClick={handleVoiceClick}
-        onStandardClick={() => {
-          setSelectedExpense(null)
-          setIsModalOpen(true)
-        }}
-      />
+            {view === 'list' ? (
+              <ExpenseList
+                expenses={expenses}
+                loading={loading}
+                onDelete={deleteExpense}
+                onExpenseClick={handleExpenseClick}
+              />
+            ) : (
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-20">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-500 border-t-pink-500" />
+                  </div>
+                }
+              >
+                <CategoryBreakdown
+                  expenses={expenses}
+                  loading={loading}
+                  onDelete={deleteExpense}
+                  onExpenseClick={handleExpenseClick}
+                />
+              </Suspense>
+            )}
+          </SwipeContainer>
 
-      {/* Voice recorder overlay */}
-      {showVoiceRecorder && (
-        <VoiceRecorderButton
-          onRecordingComplete={handleVoiceRecordingComplete}
-          onCancel={handleVoiceCancel}
-        />
+          {/* Loading overlay for screenshot parsing */}
+          {isParsingScreenshots && (
+            <ScreenshotLoadingOverlay
+              onCancel={handleCancelParsing}
+              imageCount={selectedImages.length}
+            />
+          )}
+
+          {/* FAB - Add expense (with long press for image/voice picker) */}
+          <ImagePickerButton
+            onImagesSelected={handleImagesSelected}
+            onVoiceClick={handleVoiceClick}
+            onStandardClick={() => {
+              setSelectedExpense(null)
+              setIsModalOpen(true)
+            }}
+          />
+
+          {/* Voice recorder overlay */}
+          {showVoiceRecorder && (
+            <VoiceRecorderButton
+              onRecordingComplete={handleVoiceRecordingComplete}
+              onCancel={handleVoiceCancel}
+            />
+          )}
+        </>
       )}
 
       {/* Add/Edit Expense Modal */}
@@ -269,6 +343,6 @@ function DashboardPage() {
       />
 
       <ViewTabs value={view} onChange={setView} />
-    </>
+    </Layout>
   )
 }
