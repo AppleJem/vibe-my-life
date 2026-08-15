@@ -86,17 +86,20 @@ export function SearchBar({
 
         {/* Month range row */}
         <div className="flex items-center gap-3">
-          <MonthPicker
-            value={startMonth}
-            onChange={onStartMonthChange}
-            label="From"
-          />
-          <span className="text-zinc-600">→</span>
-          <MonthPicker
-            value={endMonth}
-            onChange={onEndMonthChange}
-            label="To"
-          />
+          <div className="flex-1 min-w-0">
+            <MonthPicker
+              value={startMonth}
+              onChange={onStartMonthChange}
+              label="From"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <MonthPicker
+              value={endMonth}
+              onChange={onEndMonthChange}
+              label="To"
+            />
+          </div>
         </div>
       </div>
     </div>
