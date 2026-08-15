@@ -11,10 +11,10 @@ import { VoiceRecorderButton } from '../../components/ExpenseTracker/VoiceRecord
 import { ScreenshotLoadingOverlay } from '../../components/ExpenseTracker/ScreenshotLoadingOverlay'
 import { SearchBar } from '../../components/ExpenseTracker/SearchBar'
 import { SearchResults } from '../../components/ExpenseTracker/SearchResults'
+import { HeaderPortal, BelowHeaderPortal } from '../../components/Layout'
 import { useExpenses } from '../../hooks/useExpenses'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useExpenseSearch } from '../../hooks/useExpenseSearch'
-import { Layout } from '../../components/Layout'
 import { splitByType, sumOf } from '../../utils/transaction'
 import { priceInBase } from '../../utils/currency'
 import { getRates } from '../../services/rates'
@@ -238,24 +238,37 @@ function DashboardPage() {
     })
   }, [])
 
-  const searchContent = (
-    <SearchBar
-      query={searchQuery}
-      startMonth={searchStartMonth}
-      endMonth={searchEndMonth}
-      onQueryChange={setSearchQuery}
-      onStartMonthChange={setSearchStartMonth}
-      onEndMonthChange={setSearchEndMonth}
-      onClose={handleToggleSearch}
-    />
-  )
-
   return (
-    <Layout
-      showSearch={isSearchOpen}
-      onSearchToggle={handleToggleSearch}
-      searchContent={searchContent}
-    >
+    <>
+      {/* Portal search button into Layout header */}
+      <HeaderPortal>
+        <button
+          onClick={handleToggleSearch}
+          className={`transition-colors p-1 ${isSearchOpen ? 'text-pink-500' : 'text-zinc-400 hover:text-zinc-100'}`}
+          title="Search"
+          aria-label="Search"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </button>
+      </HeaderPortal>
+
+      {/* Portal search bar below Layout header */}
+      {isSearchOpen && (
+        <BelowHeaderPortal>
+          <SearchBar
+            query={searchQuery}
+            startMonth={searchStartMonth}
+            endMonth={searchEndMonth}
+            onQueryChange={setSearchQuery}
+            onStartMonthChange={setSearchStartMonth}
+            onEndMonthChange={setSearchEndMonth}
+            onClose={handleToggleSearch}
+          />
+        </BelowHeaderPortal>
+      )}
+
       {isSearchOpen ? (
         <SearchResults
           expenses={searchResults}
@@ -343,6 +356,6 @@ function DashboardPage() {
       />
 
       <ViewTabs value={view} onChange={setView} />
-    </Layout>
+    </>
   )
 }

@@ -8,3 +8,4 @@
 - [x] 6. Modify `Layout.tsx` — add search button + search bar slot
 - [x] 7. Modify `index.tsx` — integrate search state and conditional rendering
 - [x] 8. Verify build compiles
+- [x] 9. Merge from worktree to main branch (conflicts resolved)
