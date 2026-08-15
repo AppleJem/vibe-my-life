@@ -1,10 +1,14 @@
 import { useNavigate } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
 
 interface LayoutProps {
   children: React.ReactNode
+  showSearch?: boolean
+  onSearchToggle?: () => void
+  searchContent?: ReactNode
 }
 
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children, showSearch, onSearchToggle, searchContent }: LayoutProps) {
   const navigate = useNavigate()
 
   return (
@@ -15,6 +19,18 @@ export function Layout({ children }: LayoutProps) {
             Vibe My Life
           </h1>
           <div className="flex items-center gap-1">
+          {onSearchToggle && (
+            <button
+              onClick={onSearchToggle}
+              className={`transition-colors p-1 ${showSearch ? 'text-pink-500' : 'text-zinc-400 hover:text-zinc-100'}`}
+              title="Search"
+              aria-label="Search"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={() => navigate({ to: '/apps' })}
             className="text-zinc-400 hover:text-zinc-100 transition-colors p-1"
@@ -39,6 +55,9 @@ export function Layout({ children }: LayoutProps) {
           </div>
         </div>
       </header>
+
+      {/* Search bar slot — rendered between header and content */}
+      {showSearch && searchContent}
 
       {/* Extra bottom padding clears the dashboard's fixed tab bar and FAB. */}
       <main className="max-w-lg mx-auto px-4 pt-6 pb-28">
