@@ -52,7 +52,7 @@ export function SearchBar({
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder="Search expenses..."
-              className="w-full bg-zinc-800 text-zinc-100 text-sm rounded-lg pl-10 pr-10 py-2.5 border border-zinc-700 focus:border-pink-500 focus:outline-none focus:ring-1 focus:ring-pink-500/50 placeholder:text-zinc-500"
+              className="w-full bg-zinc-800 text-zinc-100 text-md rounded-lg pl-10 pr-10 py-2.5 border border-zinc-700 focus:border-pink-500 focus:outline-none focus:ring-1 focus:ring-pink-500/50 placeholder:text-zinc-500"
             />
             {query && (
               <button
