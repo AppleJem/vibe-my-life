@@ -9,9 +9,11 @@ interface ExpenseListProps {
   loading: boolean
   onDelete: (id: string, date: string) => Promise<void>
   onExpenseClick?: (expense: Expense) => void
+  /** `'date'` groups by day (default), `'amount'` renders a flat list largest-first. */
+  sort?: 'date' | 'amount'
 }
 
-export function ExpenseList({ expenses, loading, onDelete, onExpenseClick }: ExpenseListProps) {
+export function ExpenseList({ expenses, loading, onDelete, onExpenseClick, sort = 'date' }: ExpenseListProps) {
   const { baseCurrency } = useCurrency()
 
   if (loading) {
@@ -38,7 +40,24 @@ export function ExpenseList({ expenses, loading, onDelete, onExpenseClick }: Exp
     )
   }
 
-  // Group expenses by date
+  if (sort === 'amount') {
+    // Flat list, largest expense first.
+    const sorted = [...expenses].sort((a, b) => b.amount - a.amount || a.id.localeCompare(b.id))
+    return (
+      <div className="space-y-2">
+        {sorted.map((expense) => (
+          <ExpenseItem
+            key={expense.id}
+            expense={expense}
+            onDelete={onDelete}
+            onClick={onExpenseClick}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  // Group expenses by date (default)
   const grouped = expenses.reduce((acc, expense) => {
     if (!acc[expense.date]) acc[expense.date] = []
     acc[expense.date].push(expense)

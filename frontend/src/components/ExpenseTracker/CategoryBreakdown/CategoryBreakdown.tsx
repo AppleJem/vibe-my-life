@@ -127,6 +127,7 @@ export function CategoryBreakdown({
                 loading={false}
                 onDelete={onDelete}
                 onExpenseClick={onExpenseClick}
+                sort="amount"
               />
             </div>
           </>
