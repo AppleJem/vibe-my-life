@@ -219,8 +219,9 @@ export function groupHabits(habits: Habit[], groups: HabitGroup[]): HabitSection
   // Habits whose group has vanished — a delete that half-landed — fall back to ungrouped
   // rather than dropping out of the list entirely.
   for (const orphans of byGroup.values()) ungrouped.push(...orphans)
-
-  if (ungrouped.length > 0) sections.push({ group: null, members: ungrouped })
+  if (ungrouped.length > 0) {
+    sections.unshift({ group: null, members: ungrouped })
+  }
 
   return sections
 }
