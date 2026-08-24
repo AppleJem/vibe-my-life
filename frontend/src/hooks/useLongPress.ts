@@ -27,7 +27,7 @@ interface Options {
   disabled?: boolean
 }
 
-export function useLongPress({ onComplete, durationMs = 5000, disabled = false }: Options) {
+export function useLongPress({ onComplete, durationMs = 3000, disabled = false }: Options) {
   const [progress, setProgress] = useState(0)
   const [isHolding, setIsHolding] = useState(false)
 
