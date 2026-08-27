@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import axios from 'axios'
 import { BigCheckBox } from '../../../components/Habits/BigCheckBox'
+import { SlipButton } from '../../../components/Habits/SlipButton'
 import { CountEditor } from '../../../components/Habits/CountEditor'
 import { DurationEditor } from '../../../components/Habits/DurationEditor'
 import { HabitHeatmap } from '../../../components/Habits/HabitHeatmap'
@@ -11,7 +12,15 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { accentOf } from '../../../constants/habitColors'
 import { useHabit } from '../../../hooks/useHabits'
 import { localToday } from '../../../utils/recurring'
-import { currentStreak, longestStreak, formatShortDate } from '../../../utils/habit'
+import {
+  cleanStreak,
+  currentStreak,
+  formatShortDate,
+  longestCleanStreak,
+  longestStreak,
+  polarityOf,
+  startDateOf,
+} from '../../../utils/habit'
 import { playCompletionKlang } from '../../../utils/sounds'
 import type { CreateCompletionInput, CreateHabitInput } from '../../../types/habit'
 
@@ -43,6 +52,11 @@ function HabitDetailPage() {
   const [editorDate, setEditorDate] = useState<string | null>(null)
   /** A heatmap day waiting on the backfill confirmation. */
   const [pendingDate, setPendingDate] = useState<string | null>(null)
+  /**
+   * Today, waiting on the deliberately slow confirmation an avoid habit's slip goes through.
+   * Kept apart from `pendingDate` because the two prompts differ in wording and in friction.
+   */
+  const [pendingSlip, setPendingSlip] = useState(false)
   const [logError, setLogError] = useState<string | null>(null)
 
   const today = localToday()
@@ -75,6 +89,9 @@ function HabitDetailPage() {
   }
 
   const accent = accentOf(habit.color)
+  // An avoid habit's completions are slips, not successes — the page reads the same data
+  // upside down from here on.
+  const isAvoid = polarityOf(habit) === 'avoid'
 
   const submitLog = async (input: Omit<CreateCompletionInput, 'date'>, date: string) => {
     setIsSaving(true)
@@ -86,8 +103,11 @@ function HabitDetailPage() {
       // A 409 means another tab (or a stale render) already logged that day — worth
       // saying plainly rather than as a generic failure, since the box is about to
       // go inert and look like it worked.
+      const verb = isAvoid ? 'marked' : 'logged'
       const already =
-        date === today ? 'Already logged for today.' : `Already logged for ${formatShortDate(date)}.`
+        date === today
+          ? `Already ${verb} for today.`
+          : `Already ${verb} for ${formatShortDate(date)}.`
       setLogError(
         axios.isAxiosError(err) && err.response?.status === 409
           ? already
@@ -114,17 +134,23 @@ function HabitDetailPage() {
 
   const handleHoldComplete = () => beginLog(today)
 
+  /** No klang here, unlike the two paths below — a slip is not something to celebrate. */
+  const handleConfirmSlip = () => {
+    beginLog(today)
+    setPendingSlip(false)
+  }
+
   const handleConfirmBackdate = () => {
     if (!pendingDate) return
     // Same order as the big check box: the reward sound fires on the commitment, not
-    // on the round trip, so a count habit hears it as its editor opens.
-    playCompletionKlang()
+    // on the round trip, so a count habit hears it as its editor opens. Backfilling a slip
+    // stays silent for the same reason marking today's does.
+    if (!isAvoid) playCompletionKlang()
     beginLog(pendingDate)
     setPendingDate(null)
   }
 
   const handleSaveEdits = async (input: CreateHabitInput) => {
-    console.log('handleSaveEdits', input)
     setIsSaving(true)
     try {
       await updateHabit(input)
@@ -134,6 +160,14 @@ function HabitDetailPage() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleArchiveHabit = async () => {
+    const next = !habit.archived
+    await updateHabit({ archived: next })
+    // Archiving takes the habit off the list, so land back there; unarchiving stays put.
+    if (next) navigate({ to: '/habits' })
+    else setIsEditing(false)
   }
 
   const handleDeleteHabit = async () => {
@@ -147,14 +181,18 @@ function HabitDetailPage() {
         habit={habit}
         isSaving={isSaving}
         onSave={handleSaveEdits}
+        onArchive={handleArchiveHabit}
         onDelete={handleDeleteHabit}
         onClose={() => setIsEditing(false)}
       />
     )
   }
 
-  const streak = currentStreak(completions, today)
-  const best = longestStreak(completions)
+  // Same three slots either way, but an avoid habit counts clean days and slips rather than
+  // completions: "42 clean, 0 slips" is what someone who quit smoking wants to read.
+  const startDate = startDateOf(habit)
+  const streak = isAvoid ? cleanStreak(completions, today, startDate) : currentStreak(completions, today)
+  const best = isAvoid ? longestCleanStreak(completions, today, startDate) : longestStreak(completions)
 
   return (
     <>
@@ -171,6 +209,12 @@ function HabitDetailPage() {
 
         <h2 className="flex-1 text-lg font-semibold text-zinc-100 truncate">{habit.name}</h2>
 
+        {habit.archived && (
+          <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-400">
+            Archived
+          </span>
+        )}
+
         <button
           onClick={() => setIsEditing(true)}
           className="text-zinc-400 hover:text-zinc-100 transition-colors p-1"
@@ -182,19 +226,28 @@ function HabitDetailPage() {
         </button>
       </div>
 
-      <BigCheckBox
-        habit={habit}
-        isDone={isDone}
-        isSaving={isSaving && !editorOpen}
-        onHoldComplete={handleHoldComplete}
-      />
+      {isAvoid ? (
+        <SlipButton
+          habit={habit}
+          isSlipped={isDone}
+          isSaving={isSaving}
+          onPress={() => setPendingSlip(true)}
+        />
+      ) : (
+        <BigCheckBox
+          habit={habit}
+          isDone={isDone}
+          isSaving={isSaving && !editorOpen}
+          onHoldComplete={handleHoldComplete}
+        />
+      )}
 
       {logError && <p className="text-center text-sm text-red-400 -mt-2 mb-4">{logError}</p>}
 
       <div className="flex justify-center gap-6 text-center mb-8">
-        <Stat label="streak" value={streak} color={accent.hex} />
+        <Stat label={isAvoid ? 'clean' : 'streak'} value={streak} color={accent.hex} />
         <Stat label="best" value={best} />
-        <Stat label="total" value={completions.length} />
+        <Stat label={isAvoid ? 'slips' : 'total'} value={completions.length} />
       </div>
 
       <div className="space-y-8">
@@ -230,12 +283,35 @@ function HabitDetailPage() {
         />
       </div>
 
+      {/* The ten-second wait is the whole point: it makes marking a slip a decision rather
+          than a reflex, and gives the ten seconds back as a chance to not need it. */}
+      <ConfirmDialog
+        isOpen={pendingSlip}
+        tone="danger"
+        title="Are you sure you want to do this?"
+        message={`This marks today as a slip on ${habit.name} and ends your clean run.`}
+        confirmLabel="Yes"
+        confirmDelayMs={10_000}
+        onConfirm={handleConfirmSlip}
+        onCancel={() => setPendingSlip(false)}
+      />
+
+      {/* Backdating skips the countdown: it already costs a half-second hold plus this
+          prompt, and ten seconds a day would make catching up on a bad week unbearable. */}
       <ConfirmDialog
         isOpen={pendingDate !== null}
-        tone="primary"
-        title={`Log ${habit.name} for ${pendingDate ? formatShortDate(pendingDate) : ''}?`}
-        message="This backdates the completion to that day."
-        confirmLabel="Yes, log it"
+        tone={isAvoid ? 'danger' : 'primary'}
+        title={
+          isAvoid
+            ? `Mark ${pendingDate ? formatShortDate(pendingDate) : ''} as a slip?`
+            : `Log ${habit.name} for ${pendingDate ? formatShortDate(pendingDate) : ''}?`
+        }
+        message={
+          isAvoid
+            ? 'This records a slip on that day.'
+            : 'This backdates the completion to that day.'
+        }
+        confirmLabel={isAvoid ? 'Yes, mark it' : 'Yes, log it'}
         onConfirm={handleConfirmBackdate}
         onCancel={() => setPendingDate(null)}
       />

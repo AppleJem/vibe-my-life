@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+
 interface ConfirmDialogProps {
   isOpen: boolean
   title: string
@@ -7,6 +9,12 @@ interface ConfirmDialogProps {
   isConfirming?: boolean
   /** Shown in place of `confirmLabel` while the action is in flight. */
   confirmingLabel?: string
+  /**
+   * Holds the confirm button disabled for this long after the dialog opens, counting down in
+   * its label. For decisions that should not be dismissible by reflex — marking a slip on an
+   * avoid habit is the one this exists for. Omit for the usual instant confirm.
+   */
+  confirmDelayMs?: number
   /**
    * `danger` is the red destructive button this dialog was built for. `primary` is for
    * prompts that confirm something additive, like backfilling a habit day.
@@ -21,19 +29,47 @@ const TONES = {
   primary: 'bg-pink-500 hover:bg-pink-400',
 } as const
 
-export function ConfirmDialog({
-  isOpen,
+export function ConfirmDialog({ isOpen, ...props }: ConfirmDialogProps) {
+  // The body is a separate component so it mounts fresh each time the dialog opens, which is
+  // what resets `confirmDelayMs`: a countdown that survived a close would let the second
+  // prompt be confirmed instantly.
+  if (!isOpen) return null
+  return <ConfirmDialogBody {...props} />
+}
+
+function ConfirmDialogBody({
   title,
   message,
   confirmLabel = 'Delete',
   cancelLabel = 'Cancel',
   isConfirming = false,
   confirmingLabel = 'Deleting…',
+  confirmDelayMs,
   tone = 'danger',
   onConfirm,
   onCancel,
-}: ConfirmDialogProps) {
-  if (!isOpen) return null
+}: Omit<ConfirmDialogProps, 'isOpen'>) {
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    confirmDelayMs ? Math.ceil(confirmDelayMs / 1000) : 0
+  )
+
+  useEffect(() => {
+    if (!confirmDelayMs) return
+
+    const timer = window.setInterval(() => {
+      setSecondsLeft((current) => {
+        if (current <= 1) {
+          window.clearInterval(timer)
+          return 0
+        }
+        return current - 1
+      })
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [confirmDelayMs])
+
+  const waiting = secondsLeft > 0
 
   return (
     <div
@@ -59,10 +95,10 @@ export function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
-            disabled={isConfirming}
+            disabled={isConfirming || waiting}
             className={`flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${TONES[tone]}`}
           >
-            {isConfirming ? confirmingLabel : confirmLabel}
+            {isConfirming ? confirmingLabel : waiting ? `${confirmLabel} (${secondsLeft})` : confirmLabel}
           </button>
         </div>
       </div>

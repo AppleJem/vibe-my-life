@@ -54,6 +54,18 @@ export function useHabits() {
   }
 }
 
+/** The archived remainder of the same list query — what `useHabits()` filters out. */
+export function useArchivedHabits() {
+  const { data, isPending, error } = useHabitList()
+
+  return {
+    habits: (data?.habits ?? []).filter((habit) => habit.archived),
+    groups: data?.groups ?? [],
+    loading: isPending,
+    error: error ? 'Failed to load habits' : null,
+  }
+}
+
 /**
  * Group writes. Reads come off the same list query as everything else, so creating,
  * renaming, reordering, or deleting a group all invalidate exactly one key.

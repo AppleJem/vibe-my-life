@@ -1,6 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { accentOf } from '../../constants/habitColors'
-import { buildMonthHeatmap, formatMonth, formatShortDate, formatValue } from '../../utils/habit'
+import { SLIP_COLOR, accentOf } from '../../constants/habitColors'
+import {
+  buildMonthHeatmap,
+  formatMonth,
+  formatShortDate,
+  formatValue,
+  polarityOf,
+  startDateOf,
+} from '../../utils/habit'
 import type { Completion, Habit } from '../../types/habit'
 
 interface HabitHeatmapProps {
@@ -26,6 +33,7 @@ const MOVE_TOLERANCE = 10
 
 export function HabitHeatmap({ habit, completions, today, month, onBackdate }: HabitHeatmapProps) {
   const accent = accentOf(habit.color)
+  const isAvoid = polarityOf(habit) === 'avoid'
   const grid = buildMonthHeatmap(habit, completions, today, month)
   const [selected, setSelected] = useState<{ date: string; completion: Completion | null } | null>(
     null
@@ -92,7 +100,13 @@ export function HabitHeatmap({ habit, completions, today, month, onBackdate }: H
         {selected && (
           <p className="text-xs text-zinc-400">
             {formatShortDate(selected.date)} ·{' '}
-            {selected.completion ? formatValue(habit, selected.completion) : 'nothing logged'}
+            {selected.completion
+              ? formatValue(habit, selected.completion)
+              : isAvoid
+                ? selected.date < startDateOf(habit)
+                  ? 'before you started'
+                  : 'clean'
+                : 'nothing logged'}
           </p>
         )}
       </div>
@@ -109,8 +123,14 @@ export function HabitHeatmap({ habit, completions, today, month, onBackdate }: H
           // shape and nothing else. Days still to come stay visible but unfilled.
           const blank = cell.isOutside
           // Only a real, unlogged, past day can be backfilled. A logged day is undone from
-          // the history list, which is where the timestamp needed to delete it lives.
-          const backdatable = !!onBackdate && !blank && !cell.isFuture && !cell.completion
+          // the history list, which is where the timestamp needed to delete it lives. Days
+          // before an avoid habit's start date were never being measured, so there is
+          // nothing to record on them either.
+          const backdatable =
+            !!onBackdate && !blank && !cell.isFuture && !cell.completion && !cell.isBeforeStart
+          // Slips take the failure colour rather than a shade of the accent; days outside
+          // the measured window stay as unfilled as a day with nothing on it.
+          const background = cell.isSlip ? SLIP_COLOR : accent.levels[cell.level]
 
           return (
             <button
@@ -124,13 +144,13 @@ export function HabitHeatmap({ habit, completions, today, month, onBackdate }: H
                 onPointerCancel: cancelPress,
                 onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
               })}
-              aria-label={backdatable ? `${cell.date} — hold to log this day` : cell.date}
-              disabled={blank || cell.isFuture}
-              style={
-                blank || cell.isFuture
-                  ? undefined
-                  : { backgroundColor: accent.levels[cell.level] }
+              aria-label={
+                backdatable
+                  ? `${cell.date} — hold to ${isAvoid ? 'mark a slip on' : 'log'} this day`
+                  : cell.date
               }
+              disabled={blank || cell.isFuture}
+              style={blank || cell.isFuture ? undefined : { backgroundColor: background }}
               className={`no-tap-highlight aspect-square rounded-md text-[10px] transition-opacity ${
                 blank
                   ? 'opacity-0 pointer-events-none'
@@ -147,7 +167,11 @@ export function HabitHeatmap({ habit, completions, today, month, onBackdate }: H
         })}
       </div>
 
-      {onBackdate && <p className="text-[10px] text-zinc-600 mt-2">Hold an empty day to log it</p>}
+      {onBackdate && (
+        <p className="text-[10px] text-zinc-600 mt-2">
+          {isAvoid ? 'Hold a clean day to mark a slip' : 'Hold an empty day to log it'}
+        </p>
+      )}
     </section>
   )
 }

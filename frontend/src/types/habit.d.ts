@@ -12,12 +12,30 @@
  */
 export type HabitType = 'boolean' | 'count' | 'duration'
 
+/**
+ * What a completion record *means* — orthogonal to `HabitType`, which says what it measures.
+ *
+ * - `build` — the record is a success. A day with no record is simply nothing.
+ * - `avoid` — the record is a *slip*. A day with no record, on or after `startDate`, is a
+ *   success. "No smoking", "no alcohol": you mark the failures, not the wins.
+ *
+ * Absent means `build`. Read it through `polarityOf()` in `utils/habit`.
+ */
+export type HabitPolarity = 'build' | 'avoid'
+
 export interface Habit {
   id: string
   name: string
   emoji: string
   description: string
   type: HabitType
+  /** Absent means `build`. Only `avoid` habits carry it explicitly. */
+  polarity?: HabitPolarity
+  /**
+   * `YYYY-MM-DD`, local: the day an `avoid` habit's clean run is measured from. Not derived
+   * from `createdAt`, which is a UTC instant and can't express "I quit two months ago".
+   */
+  startDate?: string
   /** Only meaningful for `count`. */
   unit?: string
   /** Optional daily goal; when set, heatmap intensity is measured against it. */
@@ -33,6 +51,8 @@ export interface Habit {
   /**
    * Newest completion's local date, denormalised by the server so the list page can
    * show "done today" without a query per habit. Absent until the first completion.
+   *
+   * On an `avoid` habit this is the newest *slip* — the same field, read the other way up.
    */
   lastCompletedDate?: string
   createdAt: string
@@ -43,6 +63,8 @@ export interface CreateHabitInput {
   name: string
   emoji: string
   type: HabitType
+  polarity?: HabitPolarity
+  startDate?: string
   description?: string
   unit?: string
   target?: number
@@ -57,6 +79,8 @@ export interface UpdateHabitInput {
   name?: string
   emoji?: string
   type?: HabitType
+  polarity?: HabitPolarity
+  startDate?: string | null
   description?: string
   unit?: string | null
   target?: number | null

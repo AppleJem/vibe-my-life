@@ -5,14 +5,17 @@ import { TagInput } from './SuggestInput'
 import { INPUT } from './fieldStyles'
 import { ACCENTS, DEFAULT_COLOR, HABIT_EMOJIS, accentOf } from '../../constants/habitColors'
 import { useHabitGroups, useHabitTaxonomy } from '../../hooks/useHabits'
-import { normaliseTag } from '../../utils/habit'
-import type { CreateHabitInput, Habit, HabitType } from '../../types/habit'
+import { normaliseTag, polarityOf } from '../../utils/habit'
+import { localToday } from '../../utils/recurring'
+import type { CreateHabitInput, Habit, HabitPolarity, HabitType } from '../../types/habit'
 
 interface HabitFormProps {
   /** null is a blank create form. */
   habit: Habit | null
   isSaving: boolean
   onSave: (input: CreateHabitInput) => Promise<unknown>
+  /** Toggles `archived` — the caller decides which way from the habit it passed in. */
+  onArchive?: () => Promise<unknown>
   onDelete?: () => Promise<unknown>
   onClose: () => void
 }
@@ -21,6 +24,11 @@ const TYPE_OPTIONS: { type: HabitType; label: string; hint: string }[] = [
   { type: 'boolean', label: 'Done', hint: 'Did it or didn’t' },
   { type: 'count', label: 'Count', hint: 'Pages, glasses, reps' },
   { type: 'duration', label: 'Time', hint: 'Minutes spent' },
+]
+
+const POLARITY_OPTIONS: { polarity: HabitPolarity; label: string; hint: string }[] = [
+  { polarity: 'build', label: 'Build', hint: 'Do it every day' },
+  { polarity: 'avoid', label: 'Avoid', hint: 'Don’t do it' },
 ]
 
 function Section({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -37,10 +45,12 @@ function Section({ label, hint, children }: { label: string; hint?: string; chil
  * Create and edit share one form. It replaces the page body rather than opening a modal,
  * the same in-place editor idiom the recurring settings page uses.
  */
-export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitFormProps) {
+export function HabitForm({ habit, isSaving, onSave, onArchive, onDelete, onClose }: HabitFormProps) {
   const [name, setName] = useState(habit?.name ?? '')
   const [emoji, setEmoji] = useState(habit?.emoji ?? HABIT_EMOJIS[0])
   const [type, setType] = useState<HabitType>(habit?.type ?? 'boolean')
+  const [polarity, setPolarity] = useState<HabitPolarity>(habit ? polarityOf(habit) : 'build')
+  const [startDate, setStartDate] = useState(habit?.startDate ?? localToday())
   const [unit, setUnit] = useState(habit?.unit ?? '')
   const [target, setTarget] = useState(habit?.target ? String(habit.target) : '')
   // Legacy tags may predate the lowercase rule, so normalise what's already stored.
@@ -56,30 +66,54 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
   const [color, setColor] = useState(() => accentOf(habit?.color ?? DEFAULT_COLOR).hex)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isArchiving, setIsArchiving] = useState(false)
 
   const taxonomy = useHabitTaxonomy()
   const { groups, createGroup } = useHabitGroups()
   const accent = accentOf(color)
+  const isAvoid = polarity === 'avoid'
   const canSave = name.trim().length > 0 && !isSaving
+
+  /**
+   * Flipping polarity would reinterpret every record the habit already has as its opposite —
+   * a month of completions becoming a month of slips. That's a corruption, not an edit, so
+   * the choice is frozen as soon as there is any history to reinterpret.
+   */
+  const polarityLocked = !!habit?.lastCompletedDate
 
   const handleSave = async () => {
     const parsedTarget = Number(target)
+    // An avoid habit records slips, and a slip is just "it happened" — no count, no minutes.
+    const effectiveType: HabitType = isAvoid ? 'boolean' : type
 
     await onSave({
       name: name.trim(),
       emoji,
-      type,
+      type: effectiveType,
+      polarity,
+      ...(isAvoid && { startDate }),
       description: description.trim(),
       // Both are meaningless on a boolean habit, and the server clears `unit` itself
       // when the type isn't `count` — sending them anyway would just be noise.
-      ...(type === 'count' && unit.trim() && { unit: unit.trim() }),
-      ...(type !== 'boolean' && parsedTarget > 0 && { target: parsedTarget }),
+      ...(effectiveType === 'count' && unit.trim() && { unit: unit.trim() }),
+      ...(effectiveType !== 'boolean' && parsedTarget > 0 && { target: parsedTarget }),
       tags,
       // Always sent: null is what clears the group on an edit, and the server drops it
       // rather than storing an empty attribute on a create.
       groupId,
       color,
     })
+  }
+
+  const handleArchive = async () => {
+    if (!onArchive) return
+
+    setIsArchiving(true)
+    try {
+      await onArchive()
+    } finally {
+      setIsArchiving(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -137,17 +171,25 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
         </div>
       </Section>
 
-      <Section label="What gets recorded">
-        <div className="grid grid-cols-3 gap-2">
-          {TYPE_OPTIONS.map((option) => (
+      <Section
+        label="Kind"
+        hint={
+          polarityLocked
+            ? 'Kind can’t be changed once there’s history.'
+            : 'An avoid habit counts every day you don’t slip. You only mark the slips.'
+        }
+      >
+        <div className="grid grid-cols-2 gap-2">
+          {POLARITY_OPTIONS.map((option) => (
             <button
-              key={option.type}
-              onClick={() => setType(option.type)}
-              style={type === option.type ? accent.solid : undefined}
-              className={`px-2 py-3 rounded-lg text-center transition-colors ${
-                type === option.type
+              key={option.polarity}
+              onClick={() => setPolarity(option.polarity)}
+              disabled={polarityLocked}
+              style={polarity === option.polarity ? accent.solid : undefined}
+              className={`px-2 py-3 rounded-lg text-center transition-colors disabled:opacity-60 ${
+                polarity === option.polarity
                   ? 'text-zinc-950'
-                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                  : 'bg-zinc-800 text-zinc-300 enabled:hover:bg-zinc-700'
               }`}
             >
               <span className="block text-sm font-semibold">{option.label}</span>
@@ -157,7 +199,41 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
         </div>
       </Section>
 
-      {type === 'count' && (
+      {isAvoid && (
+        <Section label="Start date" hint="Clean days are counted from here.">
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className={INPUT}
+          />
+        </Section>
+      )}
+
+      {/* An avoid habit's record is always just "it happened", so there is nothing to pick. */}
+      {!isAvoid && (
+        <Section label="What gets recorded">
+          <div className="grid grid-cols-3 gap-2">
+            {TYPE_OPTIONS.map((option) => (
+              <button
+                key={option.type}
+                onClick={() => setType(option.type)}
+                style={type === option.type ? accent.solid : undefined}
+                className={`px-2 py-3 rounded-lg text-center transition-colors ${
+                  type === option.type
+                    ? 'text-zinc-950'
+                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                }`}
+              >
+                <span className="block text-sm font-semibold">{option.label}</span>
+                <span className="block text-[10px] opacity-80 mt-0.5">{option.hint}</span>
+              </button>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {!isAvoid && type === 'count' && (
         <Section label="Unit" hint="What you're counting — pages, glasses, reps.">
           <input
             value={unit}
@@ -168,7 +244,7 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
         </Section>
       )}
 
-      {type !== 'boolean' && (
+      {!isAvoid && type !== 'boolean' && (
         <Section
           label="Daily target (optional)"
           hint="When set, the heatmap shades each day against this instead of your best day."
@@ -237,6 +313,17 @@ export function HabitForm({ habit, isSaving, onSave, onDelete, onClose }: HabitF
           className={`${INPUT} resize-none`}
         />
       </Section>
+
+      {/* Archiving is undoable, so it skips the confirm the delete below insists on. */}
+      {habit && onArchive && (
+        <button
+          onClick={handleArchive}
+          disabled={isArchiving}
+          className="w-full rounded-xl bg-zinc-900 border border-zinc-800 py-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-40 mb-3"
+        >
+          {habit.archived ? 'Unarchive habit' : 'Archive habit'}
+        </button>
+      )}
 
       {habit && onDelete && (
         <button

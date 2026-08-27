@@ -157,6 +157,9 @@ export const habitModel = {
       // and an absent `unit` is what marks a habit as unitless.
       ...(input.unit !== undefined && { unit: input.unit }),
       ...(input.target !== undefined && { target: input.target }),
+      // Absent `polarity` reads as `build`, so a build habit stores nothing extra.
+      ...(input.polarity !== undefined && { polarity: input.polarity }),
+      ...(input.startDate !== undefined && { startDate: input.startDate }),
       // A null group means ungrouped — leave the attribute off entirely rather than
       // storing an empty one.
       ...(input.groupId != null && { groupId: input.groupId }),
@@ -176,7 +179,8 @@ export const habitModel = {
 
   async updateHabit(userId: string, habitId: string, updates: UpdateHabitInput): Promise<Habit> {
     const UPDATABLE = [
-      'name', 'emoji', 'type', 'description', 'unit', 'target', 'tags', 'groupId', 'color', 'archived',
+      'name', 'emoji', 'type', 'polarity', 'startDate', 'description', 'unit', 'target', 'tags',
+      'groupId', 'color', 'archived',
     ] as const
 
     const setExpressions: string[] = []

@@ -21,6 +21,17 @@
  */
 export type HabitType = 'boolean' | 'count' | 'duration'
 
+/**
+ * What a completion record *means* — orthogonal to `HabitType`, which says what it measures.
+ *
+ * - `build` — the record is a success. A day with no record is simply nothing.
+ * - `avoid` — the record is a *slip*. A day with no record, on or after `startDate`, is a
+ *   success. "No smoking", "no alcohol": you mark the failures, not the wins.
+ *
+ * Absent means `build`, so every habit stored before this existed reads correctly.
+ */
+export type HabitPolarity = 'build' | 'avoid'
+
 export interface Habit {
   id: string
   name: string
@@ -28,6 +39,15 @@ export interface Habit {
   emoji: string
   description: string
   type: HabitType
+  /** Absent means `build`. Only `avoid` habits carry it explicitly. */
+  polarity?: HabitPolarity
+  /**
+   * `YYYY-MM-DD` in the *client's* timezone: the day an `avoid` habit's clean run is
+   * measured from. Every day from here to today with no slip on it counts as a success,
+   * which is why this can't be derived from `createdAt` — that is a UTC instant, and it
+   * also can't express "I quit two months ago" on a habit created today.
+   */
+  startDate?: string
   /** Only meaningful for `count`; absent on the other two types. */
   unit?: string
   /** Optional daily goal. When set, it is what heatmap intensity is measured against. */
@@ -44,6 +64,8 @@ export interface Habit {
    * Denormalised copy of the newest completion's local `date`, so the list page can show
    * "done today" for every habit from a single query instead of one query per habit.
    * Absent when the habit has never been completed.
+   *
+   * On an `avoid` habit this is the newest *slip* — the same field, read the other way up.
    */
   lastCompletedDate?: string
   createdAt: string
@@ -55,6 +77,8 @@ export interface CreateHabitInput {
   name: string
   emoji: string
   type: HabitType
+  polarity?: HabitPolarity
+  startDate?: string
   description?: string
   unit?: string
   target?: number
@@ -69,6 +93,8 @@ export interface UpdateHabitInput {
   name?: string
   emoji?: string
   type?: HabitType
+  polarity?: HabitPolarity
+  startDate?: string | null
   description?: string
   unit?: string | null
   target?: number | null

@@ -1,4 +1,4 @@
-import type { Completion, Habit, HabitGroup } from '../types/habit'
+import type { Completion, Habit, HabitGroup, HabitPolarity } from '../types/habit'
 
 /**
  * Pure helpers for the habit detail page — streaks, the heatmap grid, and per-type
@@ -115,13 +115,79 @@ export function longestStreak(completions: Completion[]): number {
   return longest
 }
 
+/**
+ * Absent `polarity` means `build` — every habit stored before avoid habits existed. Read it
+ * through here rather than touching the field, so the default lives in one place.
+ */
+export const polarityOf = (habit: Habit): HabitPolarity => habit.polarity ?? 'build'
+
+/**
+ * Where an avoid habit's clean run starts.
+ *
+ * The form always sends a `startDate`, so the fallback is for habits that somehow got stored
+ * without one: the creation day is wrong by up to a day either side of UTC midnight, but it
+ * beats treating every day since 1970 as clean.
+ */
+export const startDateOf = (habit: Habit): string => habit.startDate ?? habit.createdAt.slice(0, 10)
+
+/**
+ * Consecutive clean days ending today: the run since the last slip, or since `startDate` if
+ * there has never been one.
+ *
+ * No grace day, unlike `currentStreak`. A build habit gets one because an unlogged day might
+ * simply not have been logged *yet*; here today is clean until it is marked otherwise, so
+ * there is nothing to be lenient about — and being lenient would mean a slip logged today
+ * didn't break the run, which is the whole point of logging it.
+ */
+export function cleanStreak(completions: Completion[], today: string, startDate: string): number {
+  const slips = datesOf(completions).filter((date) => date <= today)
+  const from = slips.length > 0 ? addDays(slips[0], 1) : startDate
+
+  // A start date in the future — or a slip logged today — leaves no clean days to count.
+  if (from > today) return 0
+  return daysBetween(from, today) + 1
+}
+
+/**
+ * The longest clean run anywhere in `[startDate, today]`.
+ *
+ * The slips are cut points: the answer is the widest gap between consecutive ones, with the
+ * range's own ends counting as cuts too. Slips outside the range are ignored rather than
+ * clamped — they belong to a window this habit no longer measures.
+ */
+export function longestCleanStreak(
+  completions: Completion[],
+  today: string,
+  startDate: string
+): number {
+  if (startDate > today) return 0
+
+  const slips = datesOf(completions)
+    .filter((date) => date >= startDate && date <= today)
+    .reverse() // oldest first
+
+  let longest = 0
+  let from = startDate
+
+  for (const slip of slips) {
+    longest = Math.max(longest, daysBetween(from, slip))
+    from = addDays(slip, 1)
+  }
+
+  // The tail from the last slip (or the start) up to and including today.
+  return Math.max(longest, from > today ? 0 : daysBetween(from, today) + 1)
+}
+
 /** The value a completion contributes to heatmap intensity. Boolean logs count as 1. */
 export function valueOf(completion: Completion): number {
   return completion.count ?? completion.durationMinutes ?? 1
 }
 
-/** "12 pages", "45 min", or "Done" — whatever the habit's type measures. */
+/** "12 pages", "45 min", "Done", or — on an avoid habit — "Slipped". */
 export function formatValue(habit: Habit, completion: Completion): string {
+  // Checked first: on an avoid habit the record is the failure, whatever it carries.
+  if (polarityOf(habit) === 'avoid') return 'Slipped'
+
   if (completion.count !== undefined) {
     const unit = completion.unit ?? habit.unit ?? ''
     return unit ? `${completion.count} ${unit}` : String(completion.count)
@@ -255,11 +321,51 @@ export function levelFor(
   return 1
 }
 
+export interface DayState {
+  /** How much of the habit's accent to fill the day with. 0 = none. */
+  level: 0 | 1 | 2 | 3 | 4
+  /** An avoid habit's recorded failure. Drawn in `SLIP_COLOR`, never in the accent. */
+  isSlip: boolean
+  /** Before an avoid habit's `startDate` — outside the measured window, drawn neutral. */
+  isBeforeStart: boolean
+}
+
+/**
+ * How one day reads, for whichever polarity the habit has. Both day-cell renderers — the
+ * month heatmap and the list page's week strip — go through this so the inversion rule
+ * exists once rather than in each of them.
+ *
+ * A build habit fills the days it was logged. An avoid habit is the other way up: every day
+ * from `startDate` to today is full unless a slip was recorded on it, and days before the
+ * start are blank because they were never being measured.
+ */
+export function dayStateFor(
+  habit: Habit,
+  completion: Completion | null,
+  date: string,
+  today: string,
+  scale: number | null
+): DayState {
+  if (polarityOf(habit) === 'build') {
+    return { level: levelFor(completion, scale), isSlip: false, isBeforeStart: false }
+  }
+
+  const isBeforeStart = date < startDateOf(habit)
+  const isSlip = completion !== null
+  const clean = !isSlip && !isBeforeStart && date <= today
+
+  return { level: clean ? 4 : 0, isSlip, isBeforeStart }
+}
+
 export interface HeatmapCell {
   date: string
-  /** 0 = nothing logged, 1–4 = increasing intensity. */
+  /** 0 = nothing to fill, 1–4 = increasing intensity. */
   level: 0 | 1 | 2 | 3 | 4
   completion: Completion | null
+  /** An avoid habit's slip — coloured as a failure rather than shaded with the accent. */
+  isSlip: boolean
+  /** Before an avoid habit's `startDate`; always false on a build habit. */
+  isBeforeStart: boolean
   /** Days after `today` — rendered as empty placeholders so the grid stays rectangular. */
   isFuture: boolean
   /** Days from the neighbouring months that pad the first and last rows. */
@@ -282,6 +388,9 @@ function daysInMonth(month: string): number {
  * habit's own best day otherwise — so a habit with no goal still shows relative effort
  * rather than a flat wall of one colour. Boolean habits have nothing to grade, so every
  * logged day is level 4.
+ *
+ * On an avoid habit none of that applies — see `dayStateFor`, which the cells are built
+ * through: the fill is inverted and the intensity scale goes unused.
  */
 export function buildMonthHeatmap(
   habit: Habit,
@@ -307,7 +416,7 @@ export function buildMonthHeatmap(
       return {
         date,
         completion,
-        level: levelFor(completion, scale),
+        ...dayStateFor(habit, completion, date, today, scale),
         isFuture: date > today,
         isOutside: date.slice(0, 7) !== month,
       } satisfies HeatmapCell

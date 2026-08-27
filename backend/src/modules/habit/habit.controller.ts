@@ -7,6 +7,9 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD
 
 const habitType = z.enum(['boolean', 'count', 'duration'])
 
+/** Absent is `build`; only `avoid` habits send it. */
+const habitPolarity = z.enum(['build', 'avoid'])
+
 /** The stored colour is the hex itself — there is no palette key to look up any more. */
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colour must be a #rrggbb hex')
 
@@ -14,6 +17,8 @@ const createHabitSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   emoji: z.string().min(1, 'Emoji is required'),
   type: habitType,
+  polarity: habitPolarity.optional(),
+  startDate: isoDate.optional(),
   description: z.string().optional().default(''),
   unit: z.string().optional(),
   target: z.number().positive().optional(),
@@ -28,6 +33,9 @@ const updateHabitSchema = z.object({
   name: z.string().min(1).optional(),
   emoji: z.string().min(1).optional(),
   type: habitType.optional(),
+  polarity: habitPolarity.optional(),
+  // null clears it — a habit switched back to `build` has no clean run to anchor.
+  startDate: isoDate.nullable().optional(),
   description: z.string().optional(),
   unit: z.string().nullable().optional(),
   target: z.number().positive().nullable().optional(),
@@ -163,9 +171,18 @@ export const habitController = {
       return res.status(400).json({ error: parsed.error.flatten() })
     }
 
+    // An avoid habit records slips, and a slip is "it happened" — there is nothing to
+    // count or time. Forced here rather than trusted from the form for the same reason
+    // the unit strip below is: the client must not be the only thing keeping a stored
+    // habit coherent.
+    const normalised =
+      parsed.data.polarity === 'avoid'
+        ? { ...parsed.data, type: 'boolean' as const, unit: undefined, target: undefined }
+        : parsed.data
+
     // A unit is meaningless on anything but a count habit, and carrying a stale one
     // would surface in the completion snapshot.
-    const input = parsed.data.type === 'count' ? parsed.data : { ...parsed.data, unit: undefined }
+    const input = normalised.type === 'count' ? normalised : { ...normalised, unit: undefined }
 
     try {
       const habit = await habitModel.createHabit(req.userId!, input)

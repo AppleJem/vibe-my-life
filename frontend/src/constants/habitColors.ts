@@ -33,6 +33,15 @@ export const ACCENTS: HabitAccent[] = [
 
 export const DEFAULT_COLOR = ACCENTS[0].hex
 
+/**
+ * What an avoid habit's slips are drawn in — Tailwind's `red-500`.
+ *
+ * Fixed rather than derived from the habit's accent, because the two colours have to read as
+ * opposites on the same grid: a habit whose accent is already red would otherwise render its
+ * slips invisibly against its clean days.
+ */
+export const SLIP_COLOR = '#ef4444'
+
 const HEX = /^#[0-9a-f]{6}$/i
 
 /** `#ec4899` + 0.5 → `rgba(236, 72, 153, 0.5)`. Assumes a validated six-digit hex. */

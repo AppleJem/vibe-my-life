@@ -1,6 +1,13 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { accentOf } from '../../constants/habitColors'
-import { addDays, formatShortDate, formatValue, intensityScale, levelFor } from '../../utils/habit'
+import { SLIP_COLOR, accentOf } from '../../constants/habitColors'
+import {
+  addDays,
+  dayStateFor,
+  formatShortDate,
+  formatValue,
+  intensityScale,
+  polarityOf,
+} from '../../utils/habit'
 import type { Completion, Habit } from '../../types/habit'
 
 interface WeekStripProps {
@@ -35,9 +42,13 @@ export const MAX_DAYS = 30
  * Shading reuses the heatmap's 0–4 levels so a half-done day reads as half-done, but the
  * scale is taken from the days on screen rather than all history: grading a partial window
  * against a personal best the strip never shows would leave every box looking faint.
+ *
+ * An avoid habit's strip is the same idea inverted — full unless a slip is on the day — which
+ * `dayStateFor` works out, so the rule lives with the heatmap's rather than twice.
  */
 export function WeekStrip({ habit, completions, today }: WeekStripProps) {
   const accent = accentOf(habit.color)
+  const isAvoid = polarityOf(habit) === 'avoid'
   const ref = useRef<HTMLDivElement>(null)
   const [days, setDays] = useState(MIN_DAYS)
 
@@ -76,13 +87,21 @@ export function WeekStrip({ habit, completions, today }: WeekStripProps) {
     >
       {dates.map((date) => {
         const completion = byDate.get(date) ?? null
+        const state = dayStateFor(habit, completion, date, today, scale)
+
+        const empty = isAvoid
+          ? state.isBeforeStart
+            ? 'before you started'
+            : 'clean'
+          : 'nothing logged'
 
         return (
           <span
             key={date}
-            aria-label={`${formatShortDate(date)}: ${completion ? formatValue(habit, completion) : 'nothing logged'
-              }`}
-            style={{ backgroundColor: accent.levels[levelFor(completion, scale)] }}
+            aria-label={`${formatShortDate(date)}: ${completion ? formatValue(habit, completion) : empty}`}
+            style={{
+              backgroundColor: state.isSlip ? SLIP_COLOR : accent.levels[state.level],
+            }}
             className={`w-4 h-4 shrink-0 rounded-sm ${date === today ? 'ring-1 ring-zinc-500' : ''}`}
           />
         )
