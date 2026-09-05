@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { SLIP_COLOR, accentOf } from '../../constants/habitColors'
 import {
+  addMonths,
   buildMonthHeatmap,
   formatMonth,
   formatShortDate,
@@ -14,7 +15,7 @@ interface HabitHeatmapProps {
   habit: Habit
   completions: Completion[]
   today: string
-  /** `YYYY-MM`. Defaults to the month `today` falls in. */
+  /** `YYYY-MM`. The month shown first; defaults to the month `today` falls in. */
   month?: string
   /**
    * Long-pressing an unlogged day asks to backfill it. Absent means the grid is
@@ -34,10 +35,29 @@ const MOVE_TOLERANCE = 10
 export function HabitHeatmap({ habit, completions, today, month, onBackdate }: HabitHeatmapProps) {
   const accent = accentOf(habit.color)
   const isAvoid = polarityOf(habit) === 'avoid'
-  const grid = buildMonthHeatmap(habit, completions, today, month)
+  const [shownMonth, setShownMonth] = useState(month ?? today.slice(0, 7))
+  const grid = buildMonthHeatmap(habit, completions, today, shownMonth)
   const [selected, setSelected] = useState<{ date: string; completion: Completion | null } | null>(
     null
   )
+
+  // Nothing to see past today, and nothing before the habit existed — the arrows stop at
+  // both ends rather than paging through empty grids. An early completion (a backfill from
+  // before the start date) still counts as history worth reaching.
+  const latestMonth = today.slice(0, 7)
+  const earliestMonth = useMemo(() => {
+    const dates = completions.map((c) => c.date).concat(startDateOf(habit))
+    return dates.reduce((min, date) => (date < min ? date : min)).slice(0, 7)
+  }, [completions, habit])
+
+  const canGoBack = shownMonth > earliestMonth
+  const canGoForward = shownMonth < latestMonth
+
+  // The caption names a day in the month being left, so it goes with the month.
+  const step = (delta: number) => {
+    setSelected(null)
+    setShownMonth((current) => addMonths(current, delta))
+  }
 
   const timerRef = useRef<number | null>(null)
   const originRef = useRef<{ x: number; y: number } | null>(null)
@@ -93,12 +113,24 @@ export function HabitHeatmap({ habit, completions, today, month, onBackdate }: H
 
   return (
     <section>
-      <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-sm font-semibold text-zinc-100">
-          {formatMonth(month ?? today.slice(0, 7))}
-        </h3>
+      <div className="flex items-baseline justify-between gap-2 mb-3">
+        <div className="flex items-center gap-1">
+          <MonthArrow
+            direction="prev"
+            disabled={!canGoBack}
+            onClick={() => step(-1)}
+          />
+          <h3 className="text-sm font-semibold text-zinc-100 min-w-[7.5rem] text-center">
+            {formatMonth(shownMonth)}
+          </h3>
+          <MonthArrow
+            direction="next"
+            disabled={!canGoForward}
+            onClick={() => step(1)}
+          />
+        </div>
         {selected && (
-          <p className="text-xs text-zinc-400">
+          <p className="text-xs text-zinc-400 text-right">
             {formatShortDate(selected.date)} ·{' '}
             {selected.completion
               ? formatValue(habit, selected.completion)
@@ -173,5 +205,41 @@ export function HabitHeatmap({ habit, completions, today, month, onBackdate }: H
         </p>
       )}
     </section>
+  )
+}
+
+/** The month steppers either side of the heading. */
+function MonthArrow({
+  direction,
+  disabled,
+  onClick,
+}: {
+  direction: 'prev' | 'next'
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={direction === 'prev' ? 'Previous month' : 'Next month'}
+      className="no-tap-highlight p-1 text-zinc-400 transition-colors hover:text-zinc-100 disabled:opacity-25 disabled:hover:text-zinc-400"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        className="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d={direction === 'prev' ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'}
+        />
+      </svg>
+    </button>
   )
 }

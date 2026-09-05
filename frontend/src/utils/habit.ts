@@ -372,6 +372,13 @@ export interface HeatmapCell {
   isOutside: boolean
 }
 
+/** Steps a `YYYY-MM` month by `delta` months, either direction. */
+export function addMonths(month: string, delta: number): string {
+  const [year, index] = month.split('-').map(Number)
+  const date = new Date(Date.UTC(year, index - 1 + delta, 1))
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
 /** Days in `2026-08`. Day 0 of the next month is the last day of this one. */
 function daysInMonth(month: string): number {
   const [year, index] = month.split('-').map(Number)
