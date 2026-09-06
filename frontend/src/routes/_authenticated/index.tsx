@@ -29,6 +29,20 @@ const CategoryBreakdown = lazy(() =>
   )
 )
 
+// Same reason — the planning donut shares the recharts bundle.
+const PlanningView = lazy(() =>
+  import('../../components/ExpenseTracker/Planning/PlanningView').then((m) => ({
+    default: m.PlanningView,
+  }))
+)
+
+/** The spinner both lazy views fall back to. */
+const chartFallback = (
+  <div className="flex items-center justify-center py-20">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-500 border-t-pink-500" />
+  </div>
+)
+
 export const Route = createFileRoute('/_authenticated/')({
   component: DashboardPage,
 })
@@ -281,42 +295,45 @@ function DashboardPage() {
         />
       ) : (
         <>
-          <SwipeContainer onSwipeLeft={goToNextMonth} onSwipeRight={goToPreviousMonth}>
-            <MonthHeader
-              yearMonth={yearMonth}
-              income={incomeTotal}
-              expense={expenseTotal}
-              onPrevious={goToPreviousMonth}
-              onNext={goToNextMonth}
-            />
-
-            {/* Budget is against money out, so it tracks `expenseTotal`, not the net. */}
-            <BudgetProgress spent={expenseTotal} budget={monthlyBudget} yearMonth={yearMonth} />
-
-            {view === 'list' ? (
-              <ExpenseList
-                expenses={expenses}
-                loading={loading}
-                onDelete={deleteExpense}
-                onExpenseClick={handleExpenseClick}
+          {/* Planning is not month-scoped — a balance is a present-value figure, so there
+              is no period to swipe through and no budget to track it against. It renders
+              outside the month chrome rather than inside it. */}
+          {view === 'plan' ? (
+            <Suspense fallback={chartFallback}>
+              <PlanningView />
+            </Suspense>
+          ) : (
+            <SwipeContainer onSwipeLeft={goToNextMonth} onSwipeRight={goToPreviousMonth}>
+              <MonthHeader
+                yearMonth={yearMonth}
+                income={incomeTotal}
+                expense={expenseTotal}
+                onPrevious={goToPreviousMonth}
+                onNext={goToNextMonth}
               />
-            ) : (
-              <Suspense
-                fallback={
-                  <div className="flex items-center justify-center py-20">
-                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-500 border-t-pink-500" />
-                  </div>
-                }
-              >
-                <CategoryBreakdown
+
+              {/* Budget is against money out, so it tracks `expenseTotal`, not the net. */}
+              <BudgetProgress spent={expenseTotal} budget={monthlyBudget} yearMonth={yearMonth} />
+
+              {view === 'list' ? (
+                <ExpenseList
                   expenses={expenses}
                   loading={loading}
                   onDelete={deleteExpense}
                   onExpenseClick={handleExpenseClick}
                 />
-              </Suspense>
-            )}
-          </SwipeContainer>
+              ) : (
+                <Suspense fallback={chartFallback}>
+                  <CategoryBreakdown
+                    expenses={expenses}
+                    loading={loading}
+                    onDelete={deleteExpense}
+                    onExpenseClick={handleExpenseClick}
+                  />
+                </Suspense>
+              )}
+            </SwipeContainer>
+          )}
 
           {/* Loading overlay for screenshot parsing */}
           {isParsingScreenshots && (
@@ -326,15 +343,19 @@ function DashboardPage() {
             />
           )}
 
-          {/* FAB - Add expense (with long press for image/voice picker) */}
-          <ImagePickerButton
-            onImagesSelected={handleImagesSelected}
-            onVoiceClick={handleVoiceClick}
-            onStandardClick={() => {
-              setSelectedExpense(null)
-              setIsModalOpen(true)
-            }}
-          />
+          {/* FAB - Add expense (with long press for image/voice picker). Absent on the
+              planning tab: nothing there takes an expense, and that view carries its own
+              "Add holding" button. */}
+          {view !== 'plan' && (
+            <ImagePickerButton
+              onImagesSelected={handleImagesSelected}
+              onVoiceClick={handleVoiceClick}
+              onStandardClick={() => {
+                setSelectedExpense(null)
+                setIsModalOpen(true)
+              }}
+            />
+          )}
 
           {/* Voice recorder overlay */}
           {showVoiceRecorder && (

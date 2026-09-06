@@ -20,6 +20,11 @@ import type {
   UpdateHabitGroupInput,
 } from '../types/habit'
 import type { Category } from '../constants/categories'
+import type {
+  Holding,
+  CreateHoldingInput,
+  UpdateHoldingInput,
+} from '../types/holding'
 
 export interface CategoryRename {
   from: string
@@ -160,6 +165,32 @@ export const recurringApi = {
   ): Promise<{ deleted: number; detached: number; months: string[] }> {
     const { data } = await api.delete(`/recurring/${id}`, { params: { deleteItems } })
     return data
+  },
+}
+
+/**
+ * Holdings are the planning tab's pots of money. Unlike expenses there is no month
+ * parameter and no rate handling here — a holding is stored in the currency it is held
+ * in, and the conversion to base happens in the client against live rates.
+ */
+export const holdingApi = {
+  async list(): Promise<Holding[]> {
+    const { data } = await api.get('/holdings')
+    return data.holdings
+  },
+
+  async create(input: CreateHoldingInput): Promise<Holding> {
+    const { data } = await api.post('/holdings', input)
+    return data.holding
+  },
+
+  async update(id: string, updates: UpdateHoldingInput): Promise<Holding> {
+    const { data } = await api.put(`/holdings/${id}`, updates)
+    return data.holding
+  },
+
+  async remove(id: string): Promise<void> {
+    await api.delete(`/holdings/${id}`)
   },
 }
 

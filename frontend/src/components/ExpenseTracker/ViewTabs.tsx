@@ -1,4 +1,4 @@
-export type DashboardView = 'list' | 'chart'
+export type DashboardView = 'list' | 'chart' | 'plan'
 
 interface ViewTabsProps {
   value: DashboardView
@@ -18,6 +18,14 @@ const TABS: { view: DashboardView; label: string; icon: React.ReactNode }[] = [
     label: 'Breakdown',
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z M20.488 9A9.004 9.004 0 0015 3.512V9h5.488z" />
+    ),
+  },
+  {
+    view: 'plan',
+    label: 'Planning',
+    icon: (
+      // A vault / bank front: where money sits, as against where it went.
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M4 21V10l8-6 8 6v11M9 21v-6h6v6" />
     ),
   },
 ]
