@@ -23,3 +23,9 @@ habitRouter.post('/:id/completions', habitController.createCompletion)
 // The timestamp is an ISO string, so the client has to encodeURIComponent it.
 habitRouter.put('/:id/completions/:timestamp', habitController.updateCompletion)
 habitRouter.delete('/:id/completions/:timestamp', habitController.deleteCompletion)
+
+// The ordered routine behind exercise mode. A save replaces the list, so add, edit,
+// reorder, and delete-a-step all come through the one PUT.
+habitRouter.get('/:id/actions', habitController.getActionList)
+habitRouter.put('/:id/actions', habitController.saveActionList)
+habitRouter.delete('/:id/actions', habitController.deleteActionList)

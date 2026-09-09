@@ -5,7 +5,7 @@ export interface LoginCredentials {
 
 export interface JwtPayload {
   userId: string
-  method: 'credentials' | 'google'
+  method: 'credentials' | 'passkey' | 'google'
 }
 
 export interface LoginResponse {

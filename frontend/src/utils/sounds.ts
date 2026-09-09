@@ -131,6 +131,46 @@ export function playCompletionKlang() {
 }
 
 /**
+ * The alarm a timed exercise step ends on — three struck bells, half a second apart.
+ *
+ * Synthesized rather than sampled, and deliberately not the completion klang: this fires
+ * while the phone is face-down on a mat and has to carry across a room, so it repeats and
+ * rings out rather than snapping once. It is also the one sound here that plays without a
+ * fresh touch behind it — the context was opened when the session started, which is what
+ * keeps iOS from swallowing it.
+ */
+export function playTimerRing() {
+  const ctx = getCtx()
+  const now = ctx.currentTime
+
+  for (let strike = 0; strike < 3; strike++) {
+    const at = now + strike * 0.5
+
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0, at)
+    gain.gain.linearRampToValueAtTime(0.45, at + 0.005)
+    gain.gain.exponentialRampToValueAtTime(0.001, at + 0.45)
+    gain.connect(ctx.destination)
+
+    // A fundamental plus an inharmonic partial — the slight detune is what reads as a
+    // bell rather than a beep.
+    for (const [frequency, level] of [[1046.5, 1], [1567.98, 0.5], [2093, 0.25]] as const) {
+      const osc = ctx.createOscillator()
+      osc.type = 'sine'
+      osc.frequency.value = frequency
+
+      const voice = ctx.createGain()
+      voice.gain.value = level
+
+      osc.connect(voice)
+      voice.connect(gain)
+      osc.start(at)
+      osc.stop(at + 0.5)
+    }
+  }
+}
+
+/**
  * Synthesized "klang" — a bright metallic impact with a quick decay.
  * The fallback for when the sample hasn't loaded.
  */

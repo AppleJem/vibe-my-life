@@ -31,6 +31,27 @@ const envSchema = z.object({
 
   // Groq API Key (for ASR)
   GROQ_API_KEY: z.string().optional(),
+
+  // Passkeys (WebAuthn). Both are optional: leave them unset and the passkey
+  // endpoints report themselves unavailable rather than the server refusing to
+  // boot, so local HTTP development keeps working on password login alone.
+  //
+  // RP_ID is the registrable domain the passkey is bound to ('jemzhang.com'),
+  // never a scheme or a port. A credential created under one RP ID cannot be
+  // used under another, so changing this orphans every passkey already enrolled.
+  RP_ID: z.string().optional(),
+  // Comma-separated origins allowed to present a passkey for RP_ID. Usually just
+  // 'https://<RP_ID>', but a second host (an apex plus a preview deploy) can be
+  // listed as long as every entry is a subdomain of RP_ID.
+  RP_ORIGIN: z
+    .string()
+    .optional()
+    .transform((value) =>
+      (value ?? '')
+        .split(',')
+        .map((url) => url.trim().replace(/\/$/, ''))
+        .filter(Boolean)
+    ),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -42,3 +63,6 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data
+
+/** Passkeys need both halves configured; neither is useful alone. */
+export const passkeysEnabled = Boolean(env.RP_ID && env.RP_ORIGIN.length > 0)

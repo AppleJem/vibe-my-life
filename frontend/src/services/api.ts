@@ -1,4 +1,13 @@
 import axios from 'axios'
+import {
+  startRegistration,
+  startAuthentication,
+  browserSupportsWebAuthn,
+} from '@simplewebauthn/browser'
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/browser'
 import type {
   Expense,
   CreateExpenseInput,
@@ -18,6 +27,8 @@ import type {
   HabitGroup,
   CreateHabitGroupInput,
   UpdateHabitGroupInput,
+  ActionList,
+  SaveActionListInput,
 } from '../types/habit'
 import type { Category } from '../constants/categories'
 import type {
@@ -64,11 +75,19 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// A failed passkey sign-in legitimately 401s while signed out. Letting the handler
+// below fire on it would clear storage and hard-navigate, throwing away the error the
+// login page is about to render — so these two are exempt.
+const PASSKEY_LOGIN_PATHS = ['/passkeys/login/options', '/passkeys/login/verify']
+
 // Handle 401 responses
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url ?? ''
+    const isPasskeyLogin = PASSKEY_LOGIN_PATHS.some((path) => url.endsWith(path))
+
+    if (error.response?.status === 401 && !isPasskeyLogin) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
@@ -89,6 +108,86 @@ export const authApi = {
 
   isAuthenticated(): boolean {
     return !!localStorage.getItem('token')
+  },
+}
+
+export interface Passkey {
+  id: string
+  name: string
+  /** Synced through a passkey provider, so it survives losing this device. */
+  backedUp: boolean
+  createdAt: string
+  /** ISO timestamp, or '' if it has never been used to sign in. */
+  lastUsedAt: string
+}
+
+/** Thrown when the user dismisses the OS prompt — not an error worth showing. */
+export class PasskeyCancelled extends Error {}
+
+/**
+ * `NotAllowedError` covers both an explicit cancel and the prompt timing out, and
+ * `AbortError` arrives when a second prompt supersedes the first. Neither is a failure
+ * the user needs told about; everything else is.
+ */
+const isCancellation = (error: unknown): boolean =>
+  error instanceof Error && (error.name === 'NotAllowedError' || error.name === 'AbortError')
+
+export const passkeyApi = {
+  /** False on http:// origins and older browsers, where WebAuthn simply isn't there. */
+  isSupported(): boolean {
+    return browserSupportsWebAuthn()
+  },
+
+  /** Whether the server has passkeys configured and at least one is enrolled. */
+  async status(): Promise<{ configured: boolean; registered: boolean }> {
+    const { data } = await api.get('/passkeys/status')
+    return data
+  },
+
+  async list(): Promise<Passkey[]> {
+    const { data } = await api.get('/passkeys')
+    return data.passkeys
+  },
+
+  async remove(id: string): Promise<void> {
+    await api.delete(`/passkeys/${encodeURIComponent(id)}`)
+  },
+
+  /** Enrols this device. Requires an existing session — the server enforces it. */
+  async register(name: string): Promise<Passkey> {
+    const { data: options } = await api.post<PublicKeyCredentialCreationOptionsJSON>(
+      '/passkeys/register/options'
+    )
+
+    let response
+    try {
+      response = await startRegistration({ optionsJSON: options })
+    } catch (error) {
+      if (isCancellation(error)) throw new PasskeyCancelled()
+      throw error
+    }
+
+    const { data } = await api.post('/passkeys/register/verify', { response, name })
+    return data.passkey
+  },
+
+  /** Signs in and stores the token, exactly as `authApi.login` does. */
+  async login(): Promise<string> {
+    const { data: options } = await api.post<PublicKeyCredentialRequestOptionsJSON>(
+      '/passkeys/login/options'
+    )
+
+    let response
+    try {
+      response = await startAuthentication({ optionsJSON: options })
+    } catch (error) {
+      if (isCancellation(error)) throw new PasskeyCancelled()
+      throw error
+    }
+
+    const { data } = await api.post('/passkeys/login/verify', { response })
+    localStorage.setItem('token', data.token)
+    return data.token
   },
 }
 
@@ -349,6 +448,33 @@ export const habitApi = {
       `/habits/${habitId}/completions/${encodeURIComponent(timestamp)}`
     )
     return data.habit
+  },
+}
+
+/**
+ * A habit's routine — the steps exercise mode walks through. Its own endpoints rather
+ * than a field on the habit, so the list request stays the lean thing the whole feature
+ * runs on.
+ */
+export const habitActionApi = {
+  /** Null when the habit has no routine, which is what hides the exercise button. */
+  async get(habitId: string): Promise<ActionList | null> {
+    const { data } = await api.get(`/habits/${habitId}/actions`)
+    return data.actionList
+  },
+
+  /**
+   * Replaces the list. Saving zero items deletes it, and the response is null in that
+   * case — the editor's "delete the whole list" and "remove the last step" land in the
+   * same place on purpose.
+   */
+  async save(habitId: string, input: SaveActionListInput): Promise<ActionList | null> {
+    const { data } = await api.put(`/habits/${habitId}/actions`, input)
+    return data.actionList
+  },
+
+  async remove(habitId: string): Promise<void> {
+    await api.delete(`/habits/${habitId}/actions`)
   },
 }
 

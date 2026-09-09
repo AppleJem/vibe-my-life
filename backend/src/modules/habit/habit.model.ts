@@ -18,6 +18,8 @@ import type {
   HabitGroup,
   CreateHabitGroupInput,
   UpdateHabitGroupInput,
+  ActionList,
+  SaveActionListInput,
 } from './habit.types.d.js'
 
 /** DynamoDB's hard cap on items per BatchWriteItem call. */
@@ -36,6 +38,15 @@ const habitKey = (userId: string, habitId: string) => ({
 const groupKey = (userId: string, groupId: string) => ({
   PK: `USER#${userId}`,
   SK: `HABIT_GROUP#${groupId}`,
+})
+
+/**
+ * One routine per habit, so the habit's own id is the whole key — there is nothing to
+ * enumerate and no id of its own to carry.
+ */
+const actionListKey = (userId: string, habitId: string) => ({
+  PK: `USER#${userId}`,
+  SK: `HABIT_ACTIONS#${habitId}`,
 })
 
 const completionKey = (userId: string, habitId: string, timestamp: string) => ({
@@ -270,6 +281,8 @@ export const habitModel = {
       }
     }
 
+    await this.deleteActionList(userId, habitId)
+
     await docClient.send(new DeleteCommand({
       TableName: HABIT_TABLE_NAME,
       Key: habitKey(userId, habitId),
@@ -383,6 +396,54 @@ export const habitModel = {
     await docClient.send(new DeleteCommand({
       TableName: HABIT_TABLE_NAME,
       Key: completionKey(userId, habitId, timestamp),
+    }))
+  },
+
+  /** Null when the habit has no routine — which is what hides exercise mode. */
+  async getActionList(userId: string, habitId: string): Promise<ActionList | null> {
+    const result = await docClient.send(new GetCommand({
+      TableName: HABIT_TABLE_NAME,
+      Key: actionListKey(userId, habitId),
+    }))
+
+    return (result.Item as ActionList) ?? null
+  },
+
+  /**
+   * Replaces the routine wholesale. Items arrive in display order and keep whatever ids
+   * they came with, so a step that survives a reorder is still the same step to anything
+   * holding onto it — an exercise session in progress, most of all.
+   */
+  async saveActionList(
+    userId: string,
+    habitId: string,
+    input: SaveActionListInput
+  ): Promise<ActionList> {
+    const actionList: ActionList = {
+      habitId,
+      items: input.items.map((item) => ({
+        id: item.id ?? uuidv4(),
+        title: item.title,
+        // Same reason as the habit definition: DynamoDB rejects an explicit `undefined`,
+        // and an absent `durationSeconds` is what makes a step a check-off step.
+        ...(item.description !== undefined && { description: item.description }),
+        ...(item.durationSeconds !== undefined && { durationSeconds: item.durationSeconds }),
+      })),
+      updatedAt: new Date().toISOString(),
+    }
+
+    await docClient.send(new PutCommand({
+      TableName: HABIT_TABLE_NAME,
+      Item: { ...actionListKey(userId, habitId), ...actionList },
+    }))
+
+    return actionList
+  },
+
+  async deleteActionList(userId: string, habitId: string): Promise<void> {
+    await docClient.send(new DeleteCommand({
+      TableName: HABIT_TABLE_NAME,
+      Key: actionListKey(userId, habitId),
     }))
   },
 

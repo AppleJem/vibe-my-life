@@ -144,3 +144,38 @@ export interface UpdateCompletionInput {
   count?: number
   durationMinutes?: number
 }
+
+/**
+ * One step in a habit's routine.
+ *
+ * `durationSeconds` is the whole distinction between the two kinds of step: with it,
+ * exercise mode runs a countdown and completes the step when it rings; without it, the
+ * step is checked off by hand.
+ */
+export interface ActionItem {
+  /** Stable across saves, so a reorder doesn't restart a step mid-session. */
+  id: string
+  title: string
+  description?: string
+  /** Absent means a check-off step. */
+  durationSeconds?: number
+}
+
+/**
+ * The ordered routine behind one habit — the thing exercise mode walks through. Fetched
+ * per habit rather than with the list, which never reads it.
+ */
+export interface ActionList {
+  habitId: string
+  items: ActionItem[]
+  updatedAt: string
+}
+
+/**
+ * A save replaces the whole list, so adding, editing, reordering, and deleting a step are
+ * one write — which is what lets the editor be a draft committed once. An item with no
+ * `id` is new and the server assigns one; saving zero items deletes the list.
+ */
+export interface SaveActionListInput {
+  items: { id?: string; title: string; description?: string; durationSeconds?: number }[]
+}

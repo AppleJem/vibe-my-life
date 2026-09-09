@@ -5,8 +5,10 @@
  *   Definition  SK = META#<habitId>
  *   Completion  SK = HABIT#<habitId>#COMPLETION#<timestamp>
  *   Group       SK = HABIT_GROUP#<groupId>
+ *   Action list SK = HABIT_ACTIONS#<habitId>
  *
- * `HABIT_GROUP#` deliberately does not begin with `HABIT#` — the sixth character differs —
+ * `HABIT_GROUP#` and `HABIT_ACTIONS#` deliberately do not begin with `HABIT#` — the sixth
+ * character differs in both —
  * so it stays clear of the bare `begins_with(SK, 'HABIT#')` sweep `listRecentCompletions`
  * uses to pull every habit's completions in one query. Any future prefix has to clear the
  * same bar.
@@ -163,4 +165,45 @@ export interface UpdateCompletionInput {
   notes?: string
   count?: number
   durationMinutes?: number
+}
+
+/**
+ * One step in a habit's routine.
+ *
+ * `durationSeconds` is what splits the two kinds of step apart: with it the step is a
+ * countdown exercise mode runs and auto-completes, without it the step is something you
+ * check off yourself. There is no third kind, so its absence is the whole distinction.
+ */
+export interface ActionItem {
+  /** Stable across saves, so reordering doesn't restart a step mid-session. */
+  id: string
+  title: string
+  description?: string
+  /** Absent means a check-off step. */
+  durationSeconds?: number
+}
+
+/**
+ * The ordered routine behind one habit — "hang, rest, repeat" for a finger-strength
+ * session. Stored as its own item rather than on the definition so the habits list, which
+ * never reads it, doesn't drag every routine back with it.
+ *
+ * Order is the array's order and nothing else; there is no separate rank field, because
+ * unlike a group's membership there is only ever one writer for a list this small.
+ */
+export interface ActionList {
+  habitId: string
+  items: ActionItem[]
+  updatedAt: string
+}
+
+/**
+ * A save replaces the whole list. Adding, editing, reordering, and deleting a step are all
+ * the same write, which is what lets the editor be a local draft committed once — and means
+ * a half-applied save is impossible.
+ *
+ * An item without an `id` is new; the server assigns one.
+ */
+export interface SaveActionListInput {
+  items: { id?: string; title: string; description?: string; durationSeconds?: number }[]
 }

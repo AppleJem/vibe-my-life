@@ -8,7 +8,16 @@ export const authService = {
       throw new Error('Invalid credentials')
     }
 
-    const payload: JwtPayload = { userId: 'me', method: 'credentials' }
+    return authService.issueToken('credentials')
+  },
+
+  /**
+   * The single place a session token is minted. Passkey login calls this too, so both
+   * routes produce an identical token and nothing downstream has to care which was used
+   * — `method` is recorded for debugging, not read for authorisation.
+   */
+  issueToken(method: JwtPayload['method']): string {
+    const payload: JwtPayload = { userId: 'me', method }
     return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '7d' })
   },
 

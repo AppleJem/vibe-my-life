@@ -56,6 +56,24 @@ const updateHabitGroupSchema = z.object({
 })
 
 /**
+ * A step in a habit's routine. `durationSeconds` present makes it a timed step; absent
+ * makes it one you check off. The upper bound is a day — a countdown longer than that is
+ * a typo, not a routine.
+ */
+const actionItemSchema = z.object({
+  // Absent on a step the editor just added; the model assigns one.
+  id: z.string().min(1).optional(),
+  title: z.string().min(1, 'Title is required'),
+  description: z.string().optional(),
+  durationSeconds: z.number().int().positive().max(86_400).optional(),
+})
+
+/** The array is the order. A save replaces the list, so there is nothing else to send. */
+const saveActionListSchema = z.object({
+  items: z.array(actionItemSchema),
+})
+
+/**
  * `date` is the client's local day, not the server's. A UTC server would file a 10pm
  * SGT log under tomorrow — the same reason the recurring module takes `today` from the
  * client rather than computing it.
@@ -337,6 +355,60 @@ export const habitController = {
     } catch (err) {
       console.error('Error updating completion:', err)
       return res.status(500).json({ error: 'Failed to update completion' })
+    }
+  },
+
+  /** `actionList` is null when the habit has no routine — the client hides exercise mode. */
+  async getActionList(req: Request, res: Response) {
+    try {
+      const actionList = await habitModel.getActionList(req.userId!, req.params.id as string)
+      return res.json({ actionList })
+    } catch (err) {
+      console.error('Error fetching action list:', err)
+      return res.status(500).json({ error: 'Failed to fetch action list' })
+    }
+  },
+
+  /**
+   * Replaces the whole routine. Saving an empty list deletes it outright rather than
+   * storing a routine with no steps — an empty list and no list mean the same thing to
+   * every reader, and only one of them can be reached twice.
+   */
+  async saveActionList(req: Request, res: Response) {
+    const parsed = saveActionListSchema.safeParse(req.body)
+
+    if (!parsed.success) {
+      console.warn('Rejected action list save:', parsed.error.flatten())
+      return res.status(400).json({ error: parsed.error.flatten() })
+    }
+
+    const habitId = req.params.id as string
+
+    try {
+      const habit = await habitModel.getHabit(req.userId!, habitId)
+      if (!habit) return res.status(404).json({ error: 'Habit not found' })
+
+      if (parsed.data.items.length === 0) {
+        await habitModel.deleteActionList(req.userId!, habitId)
+        return res.json({ actionList: null })
+      }
+
+      const actionList = await habitModel.saveActionList(req.userId!, habitId, parsed.data)
+      return res.json({ actionList })
+    } catch (err) {
+      console.error('Error saving action list:', err)
+      return res.status(500).json({ error: 'Failed to save action list' })
+    }
+  },
+
+  /** The habit and its history are untouched; it just stops having a routine. */
+  async deleteActionList(req: Request, res: Response) {
+    try {
+      await habitModel.deleteActionList(req.userId!, req.params.id as string)
+      return res.status(204).send()
+    } catch (err) {
+      console.error('Error deleting action list:', err)
+      return res.status(500).json({ error: 'Failed to delete action list' })
     }
   },
 

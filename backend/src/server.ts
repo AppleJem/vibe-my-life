@@ -2,6 +2,7 @@ import express, { type Express } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import { authRouter } from './modules/auth/auth.routes.js'
+import { passkeyRouter } from './modules/passkey/passkey.routes.js'
 import { expenseRouter } from './modules/expense/expense.routes.js'
 import { metadataRouter } from './modules/metadata/metadata.routes.js'
 import { importRouter } from './modules/import/import.routes.js'
@@ -55,6 +56,7 @@ app.get('/api/health', (_req, res) => {
 
 // Routes
 app.use('/api/auth', authRouter)
+app.use('/api/passkeys', passkeyRouter)
 app.use('/api/expenses', expenseRouter)
 app.use('/api/metadata', metadataRouter)
 app.use('/api/import', importRouter)

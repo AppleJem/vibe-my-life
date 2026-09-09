@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { habitApi, habitGroupApi } from '../services/api'
+import { habitActionApi, habitApi, habitGroupApi } from '../services/api'
 import { addDays, normaliseTag } from '../utils/habit'
 import { localToday } from '../utils/recurring'
 import type {
@@ -11,6 +11,7 @@ import type {
   CreateHabitGroupInput,
   UpdateHabitInput,
   UpdateHabitGroupInput,
+  SaveActionListInput,
 } from '../types/habit'
 
 export const habitKeys = {
@@ -20,6 +21,8 @@ export const habitKeys = {
   completions: (habitId: string) => ['habits', habitId, 'completions'] as const,
   /** Every habit's recent history, for the list strip. */
   recent: (since: string) => ['habits', 'recent', since] as const,
+  /** One habit's routine — read only by the detail page and exercise mode. */
+  actions: (habitId: string) => ['habits', habitId, 'actions'] as const,
 }
 
 /**
@@ -231,5 +234,51 @@ export function useHabit(habitId: string) {
     editCompletion: editCompletionMutation.mutateAsync,
     updateHabit: updateMutation.mutateAsync,
     deleteHabit: deleteMutation.mutateAsync,
+  }
+}
+
+/**
+ * One habit's routine: the steps exercise mode walks through, and the editor behind them.
+ *
+ * Kept out of `useHabit()` deliberately — the detail page needs to know whether a routine
+ * exists to decide whether to offer exercise mode at all, but nothing else in the app reads
+ * one, so it is a query of its own rather than another field on the list everything shares.
+ *
+ * `actionList` is null both for a habit that never had a routine and for one whose last
+ * step was just removed; the two are the same state, and `hasActions` is what the page
+ * actually asks.
+ */
+export function useActionList(habitId: string) {
+  const queryClient = useQueryClient()
+
+  const { data, isPending, error } = useQuery({
+    queryKey: habitKeys.actions(habitId),
+    queryFn: () => habitActionApi.get(habitId),
+  })
+
+  // A save returns the new list (or null when it emptied), so the cache is written
+  // straight from the response rather than invalidated into a second round trip.
+  const onSettled = (actionList: Awaited<ReturnType<typeof habitActionApi.get>>) =>
+    queryClient.setQueryData(habitKeys.actions(habitId), actionList)
+
+  const saveMutation = useMutation({
+    mutationFn: (input: SaveActionListInput) => habitActionApi.save(habitId, input),
+    onSuccess: onSettled,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => habitActionApi.remove(habitId),
+    onSuccess: () => onSettled(null),
+  })
+
+  return {
+    actionList: data ?? null,
+    items: data?.items ?? [],
+    /** False while loading too, so the exercise button appears rather than flickering away. */
+    hasActions: (data?.items.length ?? 0) > 0,
+    loading: isPending,
+    error: error ? 'Failed to load the action list' : null,
+    saveActions: saveMutation.mutateAsync,
+    deleteActions: deleteMutation.mutateAsync,
   }
 }

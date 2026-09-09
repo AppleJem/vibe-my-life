@@ -8,9 +8,11 @@ import { DurationEditor } from '../../../components/Habits/DurationEditor'
 import { HabitHeatmap } from '../../../components/Habits/HabitHeatmap'
 import { HistoryList } from '../../../components/Habits/HistoryList'
 import { HabitForm } from '../../../components/Habits/HabitForm'
+import { ActionListEditor } from '../../../components/Habits/ActionListEditor'
+import { ExerciseMode } from '../../../components/Habits/ExerciseMode'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { accentOf } from '../../../constants/habitColors'
-import { useHabit } from '../../../hooks/useHabits'
+import { useActionList, useHabit } from '../../../hooks/useHabits'
 import { localToday } from '../../../utils/recurring'
 import {
   cleanStreak,
@@ -43,7 +45,19 @@ function HabitDetailPage() {
     deleteHabit,
   } = useHabit(habitId)
 
+  const {
+    actionList,
+    items: actions,
+    hasActions,
+    saveActions,
+    deleteActions,
+  } = useActionList(habitId)
+
   const [isEditing, setIsEditing] = useState(false)
+  /** The action-list editor, which replaces the page the same way `isEditing` does. */
+  const [isEditingActions, setIsEditingActions] = useState(false)
+  /** The full-screen routine runner. */
+  const [isExercising, setIsExercising] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   /**
    * The day the open value editor is logging for — today from the big check box, or an
@@ -175,6 +189,19 @@ function HabitDetailPage() {
     navigate({ to: '/habits' })
   }
 
+  if (isEditingActions) {
+    return (
+      <ActionListEditor
+        habit={habit}
+        items={actions}
+        hasStored={actionList !== null}
+        onSave={saveActions}
+        onDelete={deleteActions}
+        onClose={() => setIsEditingActions(false)}
+      />
+    )
+  }
+
   if (isEditing) {
     return (
       <HabitForm
@@ -216,6 +243,16 @@ function HabitDetailPage() {
         )}
 
         <button
+          onClick={() => setIsEditingActions(true)}
+          className="text-zinc-400 hover:text-zinc-100 transition-colors p-1"
+          aria-label={hasActions ? 'Edit action list' : 'Add an action list'}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+          </svg>
+        </button>
+
+        <button
           onClick={() => setIsEditing(true)}
           className="text-zinc-400 hover:text-zinc-100 transition-colors p-1"
           aria-label="Edit habit"
@@ -243,6 +280,21 @@ function HabitDetailPage() {
       )}
 
       {logError && <p className="text-center text-sm text-red-400 -mt-2 mb-4">{logError}</p>}
+
+      {/* Hidden entirely when the habit has no routine — most habits are one action, and a
+          button that opens an empty runner would be worse than no button. */}
+      {hasActions && (
+        <button
+          onClick={() => setIsExercising(true)}
+          style={accent.solid}
+          className="w-full rounded-xl py-3.5 text-sm font-semibold text-zinc-950 mb-6 flex items-center justify-center gap-2"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M6.3 3.3A1 1 0 004.8 4.1v11.8a1 1 0 001.5.86l9.5-5.9a1 1 0 000-1.72l-9.5-5.9z" />
+          </svg>
+          Start exercise · {actions.length} steps
+        </button>
+      )}
 
       <div className="flex justify-center gap-6 text-center mb-8">
         <Stat label={isAvoid ? 'clean' : 'streak'} value={streak} color={accent.hex} />
@@ -315,6 +367,10 @@ function HabitDetailPage() {
         onConfirm={handleConfirmBackdate}
         onCancel={() => setPendingDate(null)}
       />
+
+      {isExercising && (
+        <ExerciseMode habit={habit} items={actions} onClose={() => setIsExercising(false)} />
+      )}
 
       {editorOpen && habit.type === 'count' && (
         <CountEditor
