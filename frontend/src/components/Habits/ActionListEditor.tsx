@@ -3,6 +3,7 @@ import { ConfirmDialog } from '../ConfirmDialog'
 import { SortableList } from './SortableList'
 import { INPUT } from './fieldStyles'
 import { accentOf } from '../../constants/habitColors'
+import { useActionListSources } from '../../hooks/useHabits'
 import type { ActionItem, Habit, SaveActionListInput } from '../../types/habit'
 
 interface ActionListEditorProps {
@@ -55,6 +56,9 @@ export function ActionListEditor({
   const [isDeleting, setIsDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [isCopying, setIsCopying] = useState(false)
+
+  const { sources } = useActionListSources(habit.id)
 
   // Cheap and exact: the draft is a handful of small objects, and comparing them by value
   // is what tells an actual edit apart from a step that was opened and closed again.
@@ -71,6 +75,19 @@ export function ActionListEditor({
 
   const remove = (id: string) =>
     setDraft((current) => current.filter((candidate) => candidate.id !== id))
+
+  /**
+   * Seeds the draft from another habit's routine. Fresh ids rather than the originals': the
+   * copy is a new routine that happens to start out identical, and editing it must not read
+   * as editing the one it came from.
+   *
+   * It lands in the draft rather than saving, so the whole thing is still reviewable — and
+   * discardable — before it becomes this habit's routine.
+   */
+  const copyFrom = (items: ActionItem[]) => {
+    setDraft(items.map((item) => ({ ...item, id: newId() })))
+    setIsCopying(false)
+  }
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -129,6 +146,18 @@ export function ActionListEditor({
           <p className="text-sm text-zinc-600 mt-1">
             Add the first one — a hang, a rest, a stretch.
           </p>
+
+          {/* Only in the empty state: once there are steps, "copy" would have to mean
+              either replace or append, and neither is what the button would look like. */}
+          {sources.length > 0 && (
+            <button
+              onClick={() => setIsCopying(true)}
+              style={accent.text}
+              className="mt-6 text-sm font-medium"
+            >
+              Or copy from another habit
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -205,6 +234,14 @@ export function ActionListEditor({
         </div>
       </div>
 
+      {isCopying && (
+        <CopySourceSheet
+          sources={sources}
+          onPick={copyFrom}
+          onCancel={() => setIsCopying(false)}
+        />
+      )}
+
       {editing && (
         <ActionItemSheet
           habit={habit}
@@ -231,6 +268,65 @@ export function ActionListEditor({
         onConfirm={onClose}
         onCancel={() => setConfirmDiscard(false)}
       />
+    </div>
+  )
+}
+
+interface CopySourceSheetProps {
+  sources: { habit: Habit; items: ActionItem[] }[]
+  onPick: (items: ActionItem[]) => void
+  onCancel: () => void
+}
+
+/**
+ * Picks another habit's routine to start from. Each row is labelled with the habit it
+ * belongs to and summarised by its steps, because "8 steps" alone doesn't distinguish two
+ * training routines from each other.
+ */
+function CopySourceSheet({ sources, onPick, onCancel }: CopySourceSheetProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={onCancel}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="w-full max-w-lg mx-auto rounded-t-2xl bg-zinc-900 border-t border-zinc-800 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm text-zinc-400 mb-1">Copy an action list</p>
+        <p className="text-xs text-zinc-600 mb-4">
+          The steps are copied in for you to edit — the original is left alone.
+        </p>
+
+        <div className="max-h-[50vh] overflow-y-auto -mx-1 px-1 space-y-2">
+          {sources.map((source) => (
+            <button
+              key={source.habit.id}
+              onClick={() => onPick(source.items)}
+              className="w-full text-left rounded-xl bg-zinc-800 hover:bg-zinc-700 transition-colors p-3"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{source.habit.emoji}</span>
+                <p className="flex-1 min-w-0 truncate text-sm font-medium text-zinc-100">
+                  {source.habit.name}
+                </p>
+                <span style={accentOf(source.habit.color).text} className="text-xs shrink-0">
+                  {source.items.length} {source.items.length === 1 ? 'step' : 'steps'}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 truncate mt-1">
+                {source.items.map((item) => item.title).join(' · ')}
+              </p>
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={onCancel}
+          className="w-full rounded-xl bg-zinc-800 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-700 mt-4"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   )
 }

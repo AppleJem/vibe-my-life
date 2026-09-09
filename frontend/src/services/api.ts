@@ -457,6 +457,16 @@ export const habitApi = {
  * runs on.
  */
 export const habitActionApi = {
+  /**
+   * Every routine the user has, steps included — what the editor's "copy from another
+   * habit" picker offers. One request rather than one per habit, and it carries the steps
+   * because copying needs them, not just a count.
+   */
+  async list(): Promise<ActionList[]> {
+    const { data } = await api.get('/habits/actions')
+    return data.actionLists ?? []
+  },
+
   /** Null when the habit has no routine, which is what hides the exercise button. */
   async get(habitId: string): Promise<ActionList | null> {
     const { data } = await api.get(`/habits/${habitId}/actions`)

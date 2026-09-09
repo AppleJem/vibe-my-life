@@ -23,6 +23,12 @@ export const habitKeys = {
   recent: (since: string) => ['habits', 'recent', since] as const,
   /** One habit's routine — read only by the detail page and exercise mode. */
   actions: (habitId: string) => ['habits', habitId, 'actions'] as const,
+  /**
+   * Every routine at once, for the editor's copy picker. Spelled `action-lists` rather than
+   * `actions` so it can't be confused with — or invalidated as a prefix of — one habit's
+   * own key above.
+   */
+  actionLists: () => ['habits', 'action-lists'] as const,
 }
 
 /**
@@ -256,10 +262,14 @@ export function useActionList(habitId: string) {
     queryFn: () => habitActionApi.get(habitId),
   })
 
-  // A save returns the new list (or null when it emptied), so the cache is written
-  // straight from the response rather than invalidated into a second round trip.
-  const onSettled = (actionList: Awaited<ReturnType<typeof habitActionApi.get>>) =>
+  // A save returns the new list (or null when it emptied), so this habit's own cache is
+  // written straight from the response rather than invalidated into a second round trip.
+  // The all-routines query behind the copy picker is a different shape, so it does have to
+  // be invalidated — a habit that just gained a routine becomes a source to copy from.
+  const onSettled = (actionList: Awaited<ReturnType<typeof habitActionApi.get>>) => {
     queryClient.setQueryData(habitKeys.actions(habitId), actionList)
+    void queryClient.invalidateQueries({ queryKey: habitKeys.actionLists() })
+  }
 
   const saveMutation = useMutation({
     mutationFn: (input: SaveActionListInput) => habitActionApi.save(habitId, input),
@@ -281,4 +291,39 @@ export function useActionList(habitId: string) {
     saveActions: saveMutation.mutateAsync,
     deleteActions: deleteMutation.mutateAsync,
   }
+}
+
+/**
+ * The routines on *other* habits, ready to be copied into the one being edited.
+ *
+ * The join happens here rather than in the component because the habit names come off the
+ * list query every page already shares, while the steps come from their own endpoint —
+ * pairing them is the only reason either is fetched, and a component doing it would have to
+ * know about both.
+ *
+ * Archived habits are deliberately included: a retired routine is still a good template,
+ * and it is the routine being offered, not the habit. Lists whose habit has been deleted
+ * are dropped — an orphan has no name to show.
+ */
+export function useActionListSources(excludeHabitId: string) {
+  const { data: habitData } = useHabitList()
+
+  const { data, isPending } = useQuery({
+    queryKey: habitKeys.actionLists(),
+    queryFn: () => habitActionApi.list(),
+  })
+
+  const sources = useMemo(() => {
+    const habits = new Map((habitData?.habits ?? []).map((habit) => [habit.id, habit]))
+
+    return (data ?? [])
+      .filter((list) => list.habitId !== excludeHabitId && list.items.length > 0)
+      .flatMap((list) => {
+        const habit = habits.get(list.habitId)
+        return habit ? [{ habit, items: list.items }] : []
+      })
+      .sort((a, b) => a.habit.name.localeCompare(b.habit.name))
+  }, [data, habitData, excludeHabitId])
+
+  return { sources, loading: isPending }
 }

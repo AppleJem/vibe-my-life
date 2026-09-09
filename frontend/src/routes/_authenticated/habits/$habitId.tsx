@@ -23,7 +23,7 @@ import {
   polarityOf,
   startDateOf,
 } from '../../../utils/habit'
-import { playCompletionKlang } from '../../../utils/sounds'
+import { playCompletionKlang, primeAudio } from '../../../utils/sounds'
 import type { CreateCompletionInput, CreateHabitInput } from '../../../types/habit'
 
 export const Route = createFileRoute('/_authenticated/habits/$habitId')({
@@ -285,7 +285,12 @@ function HabitDetailPage() {
           button that opens an empty runner would be worse than no button. */}
       {hasActions && (
         <button
-          onClick={() => setIsExercising(true)}
+          onClick={() => {
+            // Warms the audio context on the earliest gesture available, so the first
+            // countdown's bell doesn't depend on the Start tap alone.
+            primeAudio()
+            setIsExercising(true)
+          }}
           style={accent.solid}
           className="w-full rounded-xl py-3.5 text-sm font-semibold text-zinc-950 mb-6 flex items-center justify-center gap-2"
         >

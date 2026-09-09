@@ -28,10 +28,26 @@ function getCtx(): AudioContext {
     // completion sound, so the sample is ready by the time we need it.
     void loadCompletion(audioCtx)
   }
-  // Safari suspends the context when the tab backgrounds; resume is a no-op if
-  // we're already running, and this always runs inside the hold's touch gesture.
+  // Safari suspends the context when the tab backgrounds; resume is a no-op if we're
+  // already running. Callers reached from a touch gesture (the hold, and `primeAudio`)
+  // get a running context out of this; a caller on a timer may not, which is what
+  // `primeAudio` exists to prevent.
   if (audioCtx.state === 'suspended') void audioCtx.resume()
   return audioCtx
+}
+
+/**
+ * Opens the audio context from inside a user gesture, so a sound fired *later* by a timer
+ * has a running context to play into.
+ *
+ * Every other sound here is triggered by the touch that causes it, so the context is
+ * always opened under user activation and nothing had to arrange it. A countdown breaks
+ * that: the bell is scheduled by a `setInterval` callback minutes after the last tap, and
+ * a context first constructed there starts suspended with no gesture to resume it — the
+ * timer simply rang silently. Call this from the tap that *starts* a countdown instead.
+ */
+export function primeAudio(): void {
+  getCtx()
 }
 
 /**
@@ -141,6 +157,26 @@ export function playCompletionKlang() {
  */
 export function playTimerRing() {
   const ctx = getCtx()
+
+  if (ctx.state === 'running') {
+    strikeBells(ctx)
+    return
+  }
+
+  // Primed but suspended anyway — the tab was backgrounded long enough for the browser to
+  // pull the plug. Scheduling into a suspended context would pin the bells to a frozen
+  // clock, so they would only sound if and when it happened to wake. Resume first, then
+  // strike against a clock that is actually moving.
+  void ctx
+    .resume()
+    .then(() => strikeBells(ctx))
+    .catch(() => {
+      // Nothing more to try: without user activation the browser will not let us make
+      // noise, and the countdown has already completed on screen regardless.
+    })
+}
+
+function strikeBells(ctx: AudioContext) {
   const now = ctx.currentTime
 
   for (let strike = 0; strike < 3; strike++) {

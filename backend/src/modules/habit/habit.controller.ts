@@ -358,6 +358,20 @@ export const habitController = {
     }
   },
 
+  /**
+   * Every routine the user has. Routed before `GET /:id`, or Express would read this as a
+   * habit whose id is "actions" — the same collision `/habits/completions` sits behind.
+   */
+  async listActionLists(req: Request, res: Response) {
+    try {
+      const actionLists = await habitModel.listActionLists(req.userId!)
+      return res.json({ actionLists })
+    } catch (err) {
+      console.error('Error fetching action lists:', err)
+      return res.status(500).json({ error: 'Failed to fetch action lists' })
+    }
+  },
+
   /** `actionList` is null when the habit has no routine — the client hides exercise mode. */
   async getActionList(req: Request, res: Response) {
     try {

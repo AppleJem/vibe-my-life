@@ -399,6 +399,16 @@ export const habitModel = {
     }))
   },
 
+  /**
+   * Every routine the user has, for the editor's "copy from another habit" picker. One
+   * prefix query over the same partition, rather than a fetch per habit — the picker needs
+   * the steps themselves, not just which habits have some, so a count wouldn't have saved
+   * the round trip anyway.
+   */
+  async listActionLists(userId: string): Promise<ActionList[]> {
+    return queryByPrefix<ActionList>(userId, 'HABIT_ACTIONS#')
+  },
+
   /** Null when the habit has no routine — which is what hides exercise mode. */
   async getActionList(userId: string, habitId: string): Promise<ActionList | null> {
     const result = await docClient.send(new GetCommand({

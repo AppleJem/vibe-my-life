@@ -14,6 +14,9 @@ habitRouter.post('/', habitController.createHabit)
 // otherwise be read as a habit whose id is "completions".
 habitRouter.get('/completions', habitController.listRecentCompletions)
 
+// Same collision, same fix: every routine the user has, for the editor's copy picker.
+habitRouter.get('/actions', habitController.listActionLists)
+
 habitRouter.get('/:id', habitController.getHabit)
 habitRouter.put('/:id', habitController.updateHabit)
 habitRouter.delete('/:id', habitController.deleteHabit)

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { formatDuration } from './ActionListEditor'
 import { accentOf, withAlpha } from '../../constants/habitColors'
-import { playTimerRing } from '../../utils/sounds'
+import { playTimerRing, primeAudio } from '../../utils/sounds'
 import type { ActionItem, Habit } from '../../types/habit'
 
 interface ExerciseModeProps {
@@ -123,6 +123,10 @@ export function ExerciseMode({ habit, items, onClose }: ExerciseModeProps) {
 
   const startTimer = () => {
     if (!current?.durationSeconds) return
+    // The tap that starts a countdown is the last user gesture before its bell rings,
+    // minutes later, from a timer callback. Opening the audio context here is what makes
+    // that bell audible at all.
+    primeAudio()
     armedRef.current = current.id
     setEndsAt(Date.now() + (pausedMs ?? current.durationSeconds * 1000))
     setPausedMs(null)
