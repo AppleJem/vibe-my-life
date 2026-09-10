@@ -6,6 +6,7 @@ import type {
 } from './llm.types.js'
 import { createMimoProvider } from './providers/mimo.provider.js'
 import { createGeminiProvider } from './providers/gemini.provider.js'
+import { createGroqProvider } from './providers/groq.provider.js'
 
 class LLMClient {
   private providers: Map<LLMProviderName, LLMProvider> = new Map()
@@ -15,6 +16,8 @@ class LLMClient {
     // Initialize providers based on available API keys
     const mimoKey = process.env.MIMO_API_KEY
     const geminiKey = process.env.GEMINI_API_KEY
+    // Already present for Whisper transcription; the same key serves chat completions.
+    const groqKey = process.env.GROQ_API_KEY
 
     if (mimoKey && mimoKey !== 'your-mimo-api-key-here') {
       this.providers.set('mimo', createMimoProvider(mimoKey))
@@ -22,6 +25,10 @@ class LLMClient {
 
     if (geminiKey && geminiKey !== 'your-gemini-api-key-here') {
       this.providers.set('gemini', createGeminiProvider(geminiKey))
+    }
+
+    if (groqKey && groqKey !== 'your-groq-api-key-here') {
+      this.providers.set('groq', createGroqProvider(groqKey))
     }
 
     // Set default to whichever is available, preferring mimo

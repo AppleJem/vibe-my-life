@@ -33,7 +33,7 @@ export default defineConfig({
       manifest: {
         name: 'Vibe My Life',
         short_name: 'VML',
-        description: 'Track your expenses and habits',
+        description: 'Track your expenses and habits, and cook from your recipes',
         theme_color: '#a855f7',
         background_color: '#09090b',
         display: 'standalone',

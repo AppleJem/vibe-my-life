@@ -5,7 +5,7 @@ import type {
 } from '../llm.types.js'
 
 const MIMO_BASE_URL = 'https://api.xiaomimimo.com/v1/chat/completions'
-const DEFAULT_MODEL = 'mimo-v2.5'
+const DEFAULT_MODEL = 'mimo-v2.5-pro'
 
 export function createMimoProvider(apiKey: string): LLMProvider {
   return {
@@ -58,10 +58,10 @@ export function createMimoProvider(apiKey: string): LLMProvider {
         model: data.model || model,
         usage: data.usage
           ? {
-              promptTokens: data.usage.prompt_tokens,
-              completionTokens: data.usage.completion_tokens,
-              totalTokens: data.usage.total_tokens,
-            }
+            promptTokens: data.usage.prompt_tokens,
+            completionTokens: data.usage.completion_tokens,
+            totalTokens: data.usage.total_tokens,
+          }
           : undefined,
       }
     },

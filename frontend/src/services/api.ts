@@ -30,6 +30,7 @@ import type {
   ActionList,
   SaveActionListInput,
 } from '../types/habit'
+import type { Recipe, RecipeInput, RecipeDraft } from '../types/recipe'
 import type { Category } from '../constants/categories'
 import type {
   Holding,
@@ -503,6 +504,58 @@ export const habitGroupApi = {
   /** The member habits survive; they come back ungrouped. */
   async remove(id: string): Promise<void> {
     await api.delete(`/habit-groups/${id}`)
+  },
+}
+
+/**
+ * Cooking — the third life app, on its own table. Recipes are stored whole: ingredients and
+ * steps come back with the list, because a recipe is small and the list shows more than a
+ * title.
+ *
+ * Nothing here sends a servings count or a unit system. Both are reader-side views over the
+ * stored amounts, so scaling a recipe to six people is not a write.
+ */
+export const recipeApi = {
+  async list(): Promise<Recipe[]> {
+    const { data } = await api.get('/recipes')
+    return data.recipes ?? []
+  },
+
+  async get(id: string): Promise<Recipe> {
+    const { data } = await api.get(`/recipes/${id}`)
+    return data.recipe
+  },
+
+  async create(input: RecipeInput): Promise<Recipe> {
+    const { data } = await api.post('/recipes', input)
+    return data.recipe
+  },
+
+  /** A save replaces the recipe — ingredients and steps are lists whose order is meaning. */
+  async update(id: string, input: RecipeInput): Promise<Recipe> {
+    const { data } = await api.put(`/recipes/${id}`, input)
+    return data.recipe
+  },
+
+  async remove(id: string): Promise<void> {
+    await api.delete(`/recipes/${id}`)
+  },
+
+  /**
+   * Reads a recipe out of photos, pasted text, or both, and stores nothing — the draft goes
+   * to a review screen, and saving it is a separate `create`. Multipart either way, so the
+   * two inputs travel in one request.
+   */
+  async parse(
+    { text, images }: { text?: string; images?: File[] },
+    signal?: AbortSignal
+  ): Promise<RecipeDraft> {
+    const form = new FormData()
+    if (text?.trim()) form.append('text', text.trim())
+    images?.forEach((image) => form.append('images', image))
+
+    const { data } = await api.post('/recipes/parse', form, { signal })
+    return data.draft
   },
 }
 

@@ -10,7 +10,8 @@ const client = new DynamoDBClient({
   },
 })
 
-// One client serves both tables — it is scoped to a region, not to a table.
+// One client serves every table — it is scoped to a region, not to a table.
 export const docClient = DynamoDBDocumentClient.from(client)
 export const TABLE_NAME = env.DYNAMO_TABLE_NAME
 export const HABIT_TABLE_NAME = env.HABIT_TABLE_NAME
+export const COOKING_TABLE_NAME = env.COOKING_TABLE_NAME

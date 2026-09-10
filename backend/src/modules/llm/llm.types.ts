@@ -18,6 +18,18 @@ export interface LLMCompletionOptions {
   temperature?: number
   /** AbortSignal for cancellation support */
   signal?: AbortSignal
+  /**
+   * Ask the provider to constrain the response to valid JSON. Advisory: a provider that
+   * can't do it ignores the flag, so callers must still parse defensively.
+   */
+  jsonMode?: boolean
+  /**
+   * How much a hybrid reasoning model should think before answering. `'none'` disables
+   * reasoning outright, which is what an extraction task wants — there is nothing to reason
+   * about in "put this page into a fixed shape", and the thinking is billed and waited on as
+   * completion tokens. Only honoured by providers whose models accept it (Groq's qwen3).
+   */
+  reasoningEffort?: 'none' | 'default' | 'low' | 'medium' | 'high'
 }
 
 export interface LLMCompletionResponse {
@@ -35,4 +47,4 @@ export interface LLMProvider {
   complete(options: LLMCompletionOptions): Promise<LLMCompletionResponse>
 }
 
-export type LLMProviderName = 'mimo' | 'gemini'
+export type LLMProviderName = 'mimo' | 'gemini' | 'groq'

@@ -10,6 +10,9 @@ const envSchema = z.object({
   DYNAMO_TABLE_NAME: z.string().default('vibe-my-life-expense'),
   // Habits live in their own table — a separate life app, not an expense entity type.
   HABIT_TABLE_NAME: z.string().default('vibe-my-life-habit'),
+  // Cooking is the third life app, and gets the same treatment. Create it once with
+  // `pnpm --filter backend exec tsx scripts/create-cooking-table.ts`.
+  COOKING_TABLE_NAME: z.string().default('vibe-my-life-cooking'),
 
   // Auth
   JWT_SECRET: z.string().min(1),
