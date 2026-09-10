@@ -72,7 +72,7 @@ Ingredient rules:
 Step rules:
 - "title" is a short imperative label, 2-6 words: "Sear the beef", "Rest the dough".
 - "description" is the detail, or "" when the title says it all.
-- "durationSeconds" is the step's hands-off time in seconds, ONLY when the recipe gives a time to wait, simmer, bake, rest, or chill. Omit it for steps that are simply done. When a range is given, use the lower bound.
+- "durationSeconds" is the step's hands-off time in seconds, ONLY when the recipe gives a time for performing the step, if no time is given in the recipe, omit this field. When a range is given, use the lower bound.
 - "quantities" carries every amount that appears in this step's own text. IMPORTANT: do not write numbers with units inside "title" or "description". Put each one in "quantities" as { "amount", "unit" } and leave a marker {0}, {1}, ... in the text where it belongs, indexed by its position in the array.
   Example: "description": "Whisk in {0} of milk and {1} of flour", "quantities": [ { "amount": 250, "unit": "ml" }, { "amount": 2, "unit": "tbsp" } ]
   Oven and pan temperatures count: use unit "f" or "c".
