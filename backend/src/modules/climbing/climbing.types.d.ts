@@ -34,6 +34,17 @@ export interface MediaRef {
   key: string
   kind: 'image' | 'video'
   contentType: string
+  /**
+   * For a video, a still frame stored as its own object, used as the thumbnail.
+   *
+   * iOS will not paint a frame of a `<video>` until playback starts, so a video element
+   * used as a thumbnail is simply a black box on a phone — which is the whole reason this
+   * exists. A small JPEG also loads far faster than a video's metadata, for a row of them.
+   *
+   * Absent on images, and on videos stored before this existed; the client falls back to a
+   * video element for those.
+   */
+  posterKey?: string
 }
 
 export interface Climb {
@@ -74,7 +85,13 @@ export interface SessionInput {
     outcome: ClimbOutcome
     grade?: string
     description?: string
-    media?: { id?: string; key: string; kind: 'image' | 'video'; contentType: string }[]
+    media?: {
+      id?: string
+      key: string
+      kind: 'image' | 'video'
+      contentType: string
+      posterKey?: string
+    }[]
   }[]
 }
 

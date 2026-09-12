@@ -96,8 +96,13 @@ function SessionPage() {
     })
   }, [debounced, updateSession])
 
+  // Thumbnails are separate objects and need signing too, so they go in the same batch —
+  // otherwise the strip has a URL for the clip and none for the still it wants to show.
   const allKeys = useMemo(
-    () => (draft?.climbs ?? []).flatMap((climb) => (climb.media ?? []).map((m) => m.key)),
+    () =>
+      (draft?.climbs ?? []).flatMap((climb) =>
+        (climb.media ?? []).flatMap((m) => (m.posterKey ? [m.key, m.posterKey] : [m.key]))
+      ),
     [draft]
   )
   const urls = useMediaUrls(allKeys)

@@ -12,6 +12,8 @@ const mediaSchema = z.object({
   key: z.string().min(1).max(512),
   kind: z.enum(['image', 'video']),
   contentType: z.string().min(1).max(120),
+  // The thumbnail's own object, checked for ownership exactly like `key` when it is signed.
+  posterKey: z.string().min(1).max(512).optional(),
 })
 
 const climbSchema = z.object({

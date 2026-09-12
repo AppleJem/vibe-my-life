@@ -41,6 +41,25 @@ const SKIP_BELOW_BYTES = 8 * 1024 * 1024
  */
 const TIMEOUT_MS = 5 * 60 * 1000
 
+/**
+ * The frame to keep as the thumbnail — two seconds in at 30fps.
+ *
+ * Not the first frame, which on a climbing clip is usually somebody standing still at the
+ * bottom of the wall, or a blur as the phone is propped up. A short clip uses its midpoint
+ * instead, so there is always a frame to take.
+ */
+const POSTER_FRAME = 60
+
+/** Long edge of the stored thumbnail. Four times the 64px it renders at, for retina. */
+const POSTER_SIZE = 256
+
+export interface VideoCompressionResult {
+  /** The compressed clip, or the original when compressing wasn't possible or worthwhile. */
+  file: File
+  /** A still frame to use as the thumbnail, when one could be taken. */
+  poster: Blob | null
+}
+
 export interface VideoCompressionSupport {
   supported: boolean
   reason?: string
@@ -277,18 +296,20 @@ export async function compressVideo(
   file: File,
   onProgress: (fraction: number) => void = () => {},
   signal?: AbortSignal
-): Promise<File> {
-  if (!file.type.startsWith('video/') || file.size < SKIP_BELOW_BYTES) return file
-  if (!canCompressVideo().supported) return file
+): Promise<VideoCompressionResult> {
+  const original = { file, poster: null }
+
+  if (!file.type.startsWith('video/') || file.size < SKIP_BELOW_BYTES) return original
+  if (!canCompressVideo().supported) return original
 
   try {
-    return await withTimeout(transcode(file, onProgress, signal), TIMEOUT_MS, file)
+    return await withTimeout(transcode(file, onProgress, signal), TIMEOUT_MS, original)
   } catch (err) {
     // An abort is the caller's decision and has to propagate; everything else is a reason
     // to fall back rather than to fail the upload.
     if (err instanceof DOMException && err.name === 'AbortError') throw err
     console.warn('Video compression failed, uploading the original:', err)
-    return file
+    return original
   }
 }
 
@@ -311,7 +332,7 @@ async function transcode(
   file: File,
   onProgress: (fraction: number) => void,
   signal?: AbortSignal
-): Promise<File> {
+): Promise<VideoCompressionResult> {
   const throwIfAborted = () => {
     if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError')
   }
@@ -345,6 +366,19 @@ async function transcode(
   // the turn is a quarter one.
   const drawWidth = quarterTurn ? height : width
   const drawHeight = quarterTurn ? width : height
+
+  /**
+   * The thumbnail is copied off the encode canvas mid-loop, so it costs one `drawImage` and
+   * arrives already scaled and already rotated. It needs a canvas of its own because the
+   * encode canvas is overwritten by the very next frame.
+   */
+  const posterScale = Math.min(1, POSTER_SIZE / Math.max(width, height))
+  const posterCanvas = new OffscreenCanvas(
+    Math.max(1, Math.round(width * posterScale)),
+    Math.max(1, Math.round(height * posterScale))
+  )
+  const posterCtx = posterCanvas.getContext('2d')
+  let posterTaken = false
 
   // Constant for the whole clip, so it is set once rather than per frame. Rotating about
   // the canvas centre and drawing centred is what makes the turned frame land square on it.
@@ -450,6 +484,9 @@ async function transcode(
   let decoded = 0
   const total = videoSamples.length || 1
 
+  // Two seconds in, or the midpoint of anything shorter than that.
+  const posterFrame = Math.min(POSTER_FRAME, Math.max(0, Math.floor(videoSamples.length / 2)))
+
   const decoder = new VideoDecoder({
     output: (frame) => {
       // Drawing through the canvas is what does the scaling and the rotation; a VideoFrame
@@ -465,6 +502,11 @@ async function transcode(
       // A keyframe every two seconds keeps seeking usable without costing much.
       encoder.encode(scaled, { keyFrame: decoded % 60 === 0 })
       scaled.close()
+
+      if (decoded === posterFrame && posterCtx) {
+        posterCtx.drawImage(canvas, 0, 0, posterCanvas.width, posterCanvas.height)
+        posterTaken = true
+      }
 
       decoded += 1
       onProgress(Math.min(0.98, decoded / total))
@@ -529,9 +571,17 @@ async function transcode(
   const { buffer } = muxer.target as ArrayBufferTarget
   onProgress(1)
 
-  // A clip already smaller than what we produced was better off as it was.
-  if (buffer.byteLength >= file.size) return file
+  const poster = posterTaken
+    ? await posterCanvas.convertToBlob({ type: 'image/jpeg', quality: 0.72 }).catch(() => null)
+    : null
+
+  // A clip already smaller than what we produced was better off as it was — but the frame
+  // we took is still the thumbnail, since the original has none either way.
+  if (buffer.byteLength >= file.size) return { file, poster }
 
   const name = file.name.replace(/\.[^.]+$/, '') + '.mp4'
-  return new File([buffer], name, { type: 'video/mp4', lastModified: file.lastModified })
+  return {
+    file: new File([buffer], name, { type: 'video/mp4', lastModified: file.lastModified }),
+    poster,
+  }
 }

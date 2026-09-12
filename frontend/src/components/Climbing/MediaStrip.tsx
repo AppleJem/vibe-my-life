@@ -98,15 +98,29 @@ export function MediaStrip({ items, urls, readOnly = false, onChange }: MediaStr
         // over a limit the compressed one comes in comfortably under.
         update(entry.id, { phase: 'compressing', progress: 0 })
 
-        // Imported here rather than at the top: the demuxer and muxer are the better part
-        // of 60 kB gzipped, and most visits to a session never add a clip.
-        const payload = entry.isVideo
-          ? await (await import('../../utils/compressVideo')).compressVideo(
-              file,
-              (progress) => update(entry.id, { progress }),
-              entry.abort.signal
-            )
-          : await compressImage(file)
+        let payload: File
+        let poster: Blob | null = null
+
+        if (entry.isVideo) {
+          // Imported here rather than at the top: the demuxer and muxer are the better part
+          // of 60 kB gzipped, and most visits to a session never add a clip.
+          const [{ compressVideo }, { posterFromVideo }] = await Promise.all([
+            import('../../utils/compressVideo'),
+            import('../../utils/videoPoster'),
+          ])
+
+          const compressed = await compressVideo(
+            file,
+            (progress) => update(entry.id, { progress }),
+            entry.abort.signal
+          )
+          payload = compressed.file
+          // A transcode hands back a frame for free. Anything that skipped it — a clip
+          // already small enough to leave alone — needs one taken the slow way.
+          poster = compressed.poster ?? (await posterFromVideo(payload))
+        } else {
+          payload = await compressImage(file)
+        }
 
         const reason = rejectionReason(payload)
         if (reason) {
@@ -121,7 +135,20 @@ export function MediaStrip({ items, urls, readOnly = false, onChange }: MediaStr
           (progress) => update(entry.id, { progress }),
           entry.abort.signal
         )
-        onChange([...itemsRef.current, ref])
+
+        // Uploaded after the clip, and never allowed to fail it: a video with no thumbnail
+        // still plays, and the strip falls back to a video element for it.
+        let posterKey: string | undefined
+        if (poster) {
+          try {
+            const still = new File([poster], 'poster.jpg', { type: 'image/jpeg' })
+            posterKey = (await uploadMedia(still, () => {}, entry.abort.signal)).key
+          } catch (err) {
+            console.warn('Thumbnail upload failed; falling back to a video element:', err)
+          }
+        }
+
+        onChange([...itemsRef.current, { ...ref, ...(posterKey && { posterKey }) }])
       } catch (err) {
         // A cancel is a choice, not a failure — the thumbnail simply goes away.
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
@@ -135,9 +162,10 @@ export function MediaStrip({ items, urls, readOnly = false, onChange }: MediaStr
 
   const removeItem = (item: MediaRef) => {
     onChange(items.filter((i) => i.id !== item.id))
-    // Fire and forget: the record no longer points at the object, and a failed delete is a
-    // stray file rather than a broken climb.
+    // Fire and forget: the record no longer points at either object, and a failed delete is
+    // a stray file rather than a broken climb.
     void mediaApi.remove(item.key).catch(() => undefined)
+    if (item.posterKey) void mediaApi.remove(item.posterKey).catch(() => undefined)
   }
 
   if (readOnly && items.length === 0) return null
@@ -152,17 +180,37 @@ export function MediaStrip({ items, urls, readOnly = false, onChange }: MediaStr
               onClick={() => setViewing(index)}
               className="w-16 h-16 rounded-lg overflow-hidden bg-zinc-800 border border-zinc-700 block"
             >
-              {urls[item.key] ? (
-                item.kind === 'video' ? (
-                  <video src={urls[item.key]} preload="metadata" className="w-full h-full object-cover" muted />
+              {(() => {
+                // A stored still is preferred for a video and required on iOS, which won't
+                // paint a frame of a `<video>` until it plays. The video element remains the
+                // fallback for clips uploaded before thumbnails existed.
+                const still = item.posterKey ? urls[item.posterKey] : undefined
+                if (still) return <img src={still} alt="" className="w-full h-full object-cover" />
+
+                const source = urls[item.key]
+                if (!source) {
+                  return (
+                    <span className="w-full h-full flex items-center justify-center text-zinc-600 text-xs">
+                      …
+                    </span>
+                  )
+                }
+
+                return item.kind === 'video' ? (
+                  <video
+                    // The fragment asks for a frame two seconds in rather than the poster
+                    // frame the file doesn't have — the one thing that coaxes a still out
+                    // of Safari without playing the clip.
+                    src={`${source}#t=2`}
+                    preload="metadata"
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
-                  <img src={urls[item.key]} alt="" className="w-full h-full object-cover" />
+                  <img src={source} alt="" className="w-full h-full object-cover" />
                 )
-              ) : (
-                <span className="w-full h-full flex items-center justify-center text-zinc-600 text-xs">
-                  …
-                </span>
-              )}
+              })()}
             </button>
 
             {item.kind === 'video' && (

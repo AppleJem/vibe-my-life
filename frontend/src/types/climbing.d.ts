@@ -28,6 +28,14 @@ export interface MediaRef {
   key: string
   kind: 'image' | 'video'
   contentType: string
+  /**
+   * For a video, a still frame stored as its own object, used as the thumbnail.
+   *
+   * iOS will not paint a frame of a `<video>` until playback starts, so a video element
+   * used as a thumbnail is a black box on a phone. Absent on images, and on videos stored
+   * before this existed — `MediaStrip` falls back to a video element for those.
+   */
+  posterKey?: string
 }
 
 export interface Climb {

@@ -56,6 +56,7 @@ function toStored(input: SessionInput): Omit<ClimbingSession, 'id' | 'createdAt'
         key: item.key,
         kind: item.kind,
         contentType: item.contentType,
+        ...(item.posterKey !== undefined && { posterKey: item.posterKey }),
       }))
 
       return {

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { ActivityGrid } from '../../../components/Climbing/ActivityGrid'
 import { useSessions } from '../../../hooks/useClimbing'
-import { flashCount, formatSessionDate, solveCount } from '../../../utils/climbing'
+import { formatSessionDate, solveCount } from '../../../utils/climbing'
 
 export const Route = createFileRoute('/_authenticated/climbing/')({
   component: ClimbingPage,
