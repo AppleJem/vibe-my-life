@@ -9,7 +9,7 @@
  * How a climb went. Deliberately not a boolean: "projecting" and "given up" are the two
  * ends of the same unfinished climb, and the difference between them is the point.
  */
-export type ClimbOutcome = 'flashed' | 'projecting' | 'attempted' | 'given-up'
+export type ClimbOutcome = 'flashed' | 'solved' | 'projecting' | 'attempted' | 'given-up'
 
 /**
  * Whether this session's grades are numbers to step through (V4, V5) or short strings to

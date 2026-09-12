@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { ActivityGrid } from '../../../components/Climbing/ActivityGrid'
 import { useSessions } from '../../../hooks/useClimbing'
-import { flashCount, formatSessionDate } from '../../../utils/climbing'
+import { flashCount, formatSessionDate, solveCount } from '../../../utils/climbing'
 
 export const Route = createFileRoute('/_authenticated/climbing/')({
   component: ClimbingPage,
@@ -53,7 +53,7 @@ function ClimbingPage() {
           ) : (
             <ul className="space-y-2">
               {sessions.map((session) => {
-                const flashes = flashCount(session.climbs)
+                const solves = solveCount(session.climbs)
 
                 return (
                   <li key={session.id}>
@@ -66,7 +66,7 @@ function ClimbingPage() {
                         <p className="truncate text-xs text-zinc-500">
                           {formatSessionDate(session.date)} · {session.climbs.length}{' '}
                           {session.climbs.length === 1 ? 'climb' : 'climbs'}
-                          {flashes > 0 && ` · ${flashes} flashed`}
+                          {solves > 0 && ` · ${solves} solved`}
                         </p>
                       </div>
 

@@ -8,7 +8,7 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog'
 import { useKnownLocations, useSession } from '../../../hooks/useClimbing'
 import { useMediaEnabled, useMediaUrls } from '../../../hooks/useMediaUrls'
 import { useDebounce } from '../../../hooks/useDebounce'
-import { flashCount, formatSessionDate } from '../../../utils/climbing'
+import { formatSessionDate, solveCount } from '../../../utils/climbing'
 import type { Climb, ClimbingSession, GradeKind, SessionInput } from '../../../types/climbing'
 
 export const Route = createFileRoute('/_authenticated/climbing/$sessionId')({
@@ -158,7 +158,7 @@ function SessionPage() {
     setEditing(id, false)
   }
 
-  const flashes = flashCount(draft.climbs as Climb[])
+  const solves = solveCount(draft.climbs as Climb[])
   const unsaved = serialised !== savedRef.current
 
   return (
@@ -184,7 +184,7 @@ function SessionPage() {
           <p className="text-xs text-zinc-500">
             {formatSessionDate(draft.date)} · {draft.climbs.length}{' '}
             {draft.climbs.length === 1 ? 'climb' : 'climbs'}
-            {flashes > 0 && ` · ${flashes} flashed`}
+            {solves > 0 && ` · ${solves} solved`}
             {' · '}
             <span className={saveFailed ? 'text-red-400' : 'text-zinc-600'}>
               {saveFailed ? 'save failed' : saving ? 'saving…' : unsaved ? 'unsaved' : 'saved'}

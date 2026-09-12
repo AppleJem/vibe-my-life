@@ -20,6 +20,7 @@ export const GRADE_SYSTEMS = [
 
 export const OUTCOMES: { value: ClimbOutcome; label: string; dot: string; text: string }[] = [
   { value: 'flashed', label: 'Flashed', dot: 'bg-emerald-400', text: 'text-emerald-400' },
+  { value: 'solved', label: 'Solved', dot: 'bg-green-400', text: 'text-green-400' },
   { value: 'projecting', label: 'Projecting', dot: 'bg-sky-400', text: 'text-sky-400' },
   { value: 'attempted', label: 'Attempted', dot: 'bg-amber-400', text: 'text-amber-400' },
   { value: 'given-up', label: 'Given up', dot: 'bg-zinc-500', text: 'text-zinc-500' },
@@ -140,6 +141,8 @@ export function stepGrade(current: string | undefined, delta: number): string {
 export const flashCount = (climbs: Climb[]) =>
   climbs.filter((climb) => climb.outcome === 'flashed').length
 
+export const solveCount = (climbs: Climb[]) =>
+  climbs.filter((climb) => climb.outcome === 'solved' || climb.outcome === 'flashed').length
 /** A grade as it should read on screen: "V4", "6b+" — the system prefixed only when short. */
 export function formatGrade(grade: string, gradeSystem: string, kind: string): string {
   if (!grade) return ''
