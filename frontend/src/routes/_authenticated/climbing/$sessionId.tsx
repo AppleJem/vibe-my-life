@@ -46,6 +46,24 @@ function SessionPage() {
   const mediaEnabled = useMediaEnabled()
 
   const [draft, setDraft] = useState<SessionInput | null>(null)
+
+  /**
+   * Which climbs are open for editing. Purely a view state — nothing here is saved, and
+   * nothing about it reaches the server.
+   *
+   * Empty to begin with, so a session you have opened to look at reads as a finished list
+   * rather than a page of live inputs: a climb already stored was, by definition, already
+   * logged. Adding one opens it; ticking it closes it again.
+   */
+  const [editingIds, setEditingIds] = useState<ReadonlySet<string>>(() => new Set())
+
+  const setEditing = (id: string, open: boolean) =>
+    setEditingIds((current) => {
+      const next = new Set(current)
+      if (open) next.add(id)
+      else next.delete(id)
+      return next
+    })
   const [editingHeader, setEditingHeader] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
@@ -127,18 +145,18 @@ function SessionPage() {
       climbs: (draft.climbs as Climb[]).map((c) => (c.id === climb.id ? climb : c)),
     })
 
-  const addClimb = () =>
-    patch({
-      climbs: [
-        ...draft.climbs,
-        // Client-side id so the row is addressable before it has ever been saved; the
-        // backend adopts it rather than assigning its own.
-        { id: crypto.randomUUID(), outcome: 'attempted' as const },
-      ],
-    })
+  const addClimb = () => {
+    // Client-side id so the row is addressable before it has ever been saved; the backend
+    // adopts it rather than assigning its own.
+    const id = crypto.randomUUID()
+    patch({ climbs: [...draft.climbs, { id, outcome: 'attempted' as const }] })
+    setEditing(id, true)
+  }
 
-  const removeClimb = (id: string) =>
+  const removeClimb = (id: string) => {
     patch({ climbs: draft.climbs.filter((climb) => climb.id !== id) })
+    setEditing(id, false)
+  }
 
   const flashes = flashCount(draft.climbs as Climb[])
   const unsaved = serialised !== savedRef.current
@@ -215,7 +233,10 @@ function SessionPage() {
             gradeSystem={draft.gradeSystem}
             urls={urls}
             mediaEnabled={mediaEnabled}
+            editing={editingIds.has(climb.id)}
             onChange={patchClimb}
+            onDone={() => setEditing(climb.id, false)}
+            onEdit={() => setEditing(climb.id, true)}
             onRemove={() => removeClimb(climb.id)}
           />
         ))}

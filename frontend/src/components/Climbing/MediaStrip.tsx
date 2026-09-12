@@ -9,6 +9,8 @@ interface MediaStripProps {
   items: MediaRef[]
   /** Presigned read URLs, keyed by object key — from `useMediaUrls` on the page. */
   urls: Record<string, string>
+  /** Thumbnails still open in the viewer; only adding and removing goes away. */
+  readOnly?: boolean
   onChange: (items: MediaRef[]) => void
 }
 
@@ -37,7 +39,7 @@ interface Pending {
  * swapped for the stored reference when the upload lands — so a slow phone video doesn't
  * make the row look like nothing happened.
  */
-export function MediaStrip({ items, urls, onChange }: MediaStripProps) {
+export function MediaStrip({ items, urls, readOnly = false, onChange }: MediaStripProps) {
   const fileInput = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<Pending[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -138,6 +140,8 @@ export function MediaStrip({ items, urls, onChange }: MediaStripProps) {
     void mediaApi.remove(item.key).catch(() => undefined)
   }
 
+  if (readOnly && items.length === 0) return null
+
   return (
     <div>
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -169,14 +173,16 @@ export function MediaStrip({ items, urls, onChange }: MediaStripProps) {
               </span>
             )}
 
-            <button
-              type="button"
-              onClick={() => removeItem(item)}
-              aria-label="Remove"
-              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-zinc-950 border border-zinc-700 text-zinc-400 text-xs leading-none hover:text-red-400"
-            >
-              ×
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => removeItem(item)}
+                aria-label="Remove"
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-zinc-950 border border-zinc-700 text-zinc-400 text-xs leading-none hover:text-red-400"
+              >
+                ×
+              </button>
+            )}
           </div>
         ))}
 
@@ -232,14 +238,16 @@ export function MediaStrip({ items, urls, onChange }: MediaStripProps) {
           </div>
         ))}
 
-        <button
-          type="button"
-          onClick={() => fileInput.current?.click()}
-          aria-label="Add a photo or clip"
-          className="shrink-0 w-16 h-16 rounded-lg border border-dashed border-zinc-700 text-zinc-600 hover:text-sky-400 hover:border-sky-400/50 transition-colors text-xl"
-        >
-          +
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            aria-label="Add a photo or clip"
+            className="shrink-0 w-16 h-16 rounded-lg border border-dashed border-zinc-700 text-zinc-600 hover:text-sky-400 hover:border-sky-400/50 transition-colors text-xl"
+          >
+            +
+          </button>
+        )}
       </div>
 
       {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
