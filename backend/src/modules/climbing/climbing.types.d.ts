@@ -14,7 +14,7 @@
  * ends of the same unfinished climb, and the difference between them is the whole point
  * of writing it down.
  */
-export type ClimbOutcome = 'flashed' | 'projecting' | 'attempted' | 'given-up'
+export type ClimbOutcome = 'flashed' | 'solved' | 'projecting' | 'attempted' | 'given-up'
 
 /**
  * Whether this session's grades are numbers to step through (V4, V5) or short strings to
