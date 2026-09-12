@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { blobToWav } from '../../utils/audioToWav'
+import { blobToWav } from '../utils/audioToWav'
 import { LiveWaveform } from './LiveWaveform'
 
 interface VoiceRecorderButtonProps {

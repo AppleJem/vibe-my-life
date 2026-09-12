@@ -1,7 +1,50 @@
 import type { Request, Response } from 'express'
 import { voiceService, type VoiceCategory } from './voice.service.js'
+import { transcribeAudio } from './transcribe.js'
+
+/** Codec variants like 'audio/ogg;codecs=opus' arrive from MediaRecorder; strip them. */
+const ALLOWED_AUDIO_MIMES = [
+  'audio/webm',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/mp3',
+  'audio/m4a',
+  'audio/x-m4a',
+]
 
 export const voiceController = {
+  /**
+   * The words, and nothing else — no LLM pass, no parsing, no structure.
+   *
+   * `/parse` below is the expense flow, which transcribes and *then* interprets. This is
+   * for a plain text field somewhere in the app that would rather be dictated than typed.
+   */
+  async transcribe(req: Request, res: Response) {
+    const file = req.file as Express.Multer.File | undefined
+
+    if (!file) {
+      return res.status(400).json({ error: 'Audio file is required' })
+    }
+
+    const cleanMimeType = file.mimetype.split(';')[0].trim()
+    if (!ALLOWED_AUDIO_MIMES.includes(cleanMimeType)) {
+      return res.status(400).json({
+        error: 'Invalid audio format. Supported: webm, ogg, mp4, mpeg, wav, mp3, m4a',
+      })
+    }
+
+    try {
+      const transcript = await transcribeAudio(file.buffer, file.mimetype)
+      return res.json({ transcript })
+    } catch (err: any) {
+      console.error('Error transcribing audio:', err)
+      return res.status(500).json({ error: err.message || 'Failed to transcribe the recording' })
+    }
+  },
+
   async parseVoiceRecording(req: Request, res: Response) {
     const file = req.file as Express.Multer.File | undefined
 

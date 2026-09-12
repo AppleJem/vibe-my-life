@@ -6,7 +6,7 @@ export const Route = createFileRoute('/_authenticated/apps')({
 
 /**
  * The point where "Vibe My Life" stops being an expense tracker and becomes a shell that
- * hosts life apps. Three tiles today; the grid takes more without a redesign.
+ * hosts life apps. Four tiles today; the grid takes more without a redesign.
  */
 const APPS = [
   {
@@ -29,6 +29,13 @@ const APPS = [
     name: 'Cooking',
     blurb: 'Recipes, scaled and converted',
     accent: 'text-amber-400',
+  },
+  {
+    to: '/climbing',
+    emoji: '🧗',
+    name: 'Climbing',
+    blurb: 'Sessions, sends and projects',
+    accent: 'text-sky-400',
   },
 ] as const
 

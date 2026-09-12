@@ -13,6 +13,8 @@ import { voiceRouter } from './modules/voice/voice.routes.js'
 import { habitRouter } from './modules/habit/habit.routes.js'
 import { habitGroupRouter } from './modules/habit/habitGroup.routes.js'
 import { recipeRouter } from './modules/recipe/recipe.routes.js'
+import { climbingRouter } from './modules/climbing/climbing.routes.js'
+import { mediaRouter } from './modules/media/media.routes.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { env } from './config/env.js'
 
@@ -68,6 +70,8 @@ app.use('/api/voice', voiceRouter)
 app.use('/api/habits', habitRouter)
 app.use('/api/habit-groups', habitGroupRouter)
 app.use('/api/recipes', recipeRouter)
+app.use('/api/climbing', climbingRouter)
+app.use('/api/media', mediaRouter)
 
 // Error handler (must be last)
 app.use(errorHandler)

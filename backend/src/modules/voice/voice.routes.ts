@@ -43,3 +43,6 @@ voiceRouter.use((req, _res, next) => {
 voiceRouter.use(authMiddleware)
 
 voiceRouter.post('/parse', upload.single('audio'), voiceController.parseVoiceRecording)
+
+// Transcript only, for text fields that want dictation rather than an expense.
+voiceRouter.post('/transcribe', upload.single('audio'), voiceController.transcribe)

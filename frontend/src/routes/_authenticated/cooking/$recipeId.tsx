@@ -38,6 +38,27 @@ function RecipePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  /**
+   * Checked-off steps, per recipe. Kept in storage rather than component state because a
+   * cooking session outlives the page: the phone sleeps, iOS reloads the PWA, and losing your
+   * place halfway through a method is worse than finding old checks next time — which the
+   * progress line makes obvious and one tap clears.
+   */
+  const [doneList, setDoneList] = useLocalStorage<string[]>(`cooking:done:${recipeId}`, [])
+
+  /**
+   * Only ids that are still steps of this recipe. An edit that deletes a checked step leaves
+   * its id in storage; reading through this means it can't inflate "3 of 2 done".
+   */
+  const doneIds = useMemo(
+    () => new Set(doneList.filter((id) => recipe?.steps.some((step) => step.id === id))),
+    [doneList, recipe]
+  )
+
+  const toggleDone = (stepId: string) =>
+    setDoneList((current) =>
+      current.includes(stepId) ? current.filter((id) => id !== stepId) : [...current, stepId]
+    )
 
   /** Whether the toggle would change anything at all on this particular page. */
   const convertible = useMemo(
@@ -177,8 +198,31 @@ function RecipePage() {
       <h3 className="mb-2 text-sm font-semibold text-zinc-300">Ingredients</h3>
       <IngredientList ingredients={recipe.ingredients} factor={factor} system={system} />
 
-      <h3 className="mt-8 mb-3 text-sm font-semibold text-zinc-300">Steps</h3>
-      <StepList steps={recipe.steps} factor={factor} system={system} />
+      <div className="mt-8 mb-3 flex items-baseline gap-2">
+        <h3 className="text-sm font-semibold text-zinc-300">Steps</h3>
+        {doneIds.size > 0 && (
+          <>
+            <span className="text-xs text-zinc-500">
+              {doneIds.size === recipe.steps.length
+                ? 'All done'
+                : `${doneIds.size} of ${recipe.steps.length} done`}
+            </span>
+            <button
+              onClick={() => setDoneList([])}
+              className="ml-auto text-xs font-medium text-zinc-500 hover:text-zinc-200 transition-colors"
+            >
+              Clear
+            </button>
+          </>
+        )}
+      </div>
+      <StepList
+        steps={recipe.steps}
+        factor={factor}
+        system={system}
+        doneIds={doneIds}
+        onToggleDone={toggleDone}
+      />
 
 
     </>

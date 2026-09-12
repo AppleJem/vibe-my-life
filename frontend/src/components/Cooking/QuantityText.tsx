@@ -6,6 +6,11 @@ interface QuantityTextProps {
   quantities?: Quantity[]
   factor: number
   system: UnitSystem
+  /**
+   * Renders the amounts in the surrounding text colour instead of the accent. For a step that
+   * is already done: its amounts are no longer something to look for.
+   */
+  muted?: boolean
 }
 
 /**
@@ -16,14 +21,17 @@ interface QuantityTextProps {
  * sentence that just changed under the servings stepper, and a cook scanning a step for
  * "how much" should find them without reading it.
  */
-export function QuantityText({ text, quantities, factor, system }: QuantityTextProps) {
+export function QuantityText({ text, quantities, factor, system, muted }: QuantityTextProps) {
   const segments = splitQuantityText(text, quantities, { factor, system })
 
   return (
     <>
       {segments.map((segment, index) =>
         segment.isQuantity ? (
-          <span key={index} className="font-semibold text-amber-400 tabular-nums">
+          <span
+            key={index}
+            className={`font-semibold tabular-nums ${muted ? '' : 'text-amber-400'}`}
+          >
             {segment.text}
           </span>
         ) : (

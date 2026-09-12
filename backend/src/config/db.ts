@@ -15,3 +15,4 @@ export const docClient = DynamoDBDocumentClient.from(client)
 export const TABLE_NAME = env.DYNAMO_TABLE_NAME
 export const HABIT_TABLE_NAME = env.HABIT_TABLE_NAME
 export const COOKING_TABLE_NAME = env.COOKING_TABLE_NAME
+export const CLIMBING_TABLE_NAME = env.CLIMBING_TABLE_NAME

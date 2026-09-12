@@ -31,6 +31,8 @@ import type {
   SaveActionListInput,
 } from '../types/habit'
 import type { Recipe, RecipeInput, RecipeDraft } from '../types/recipe'
+import type { ClimbingSession, SessionInput } from '../types/climbing'
+import type { UploadTicket } from '../types/media'
 import type { Category } from '../constants/categories'
 import type {
   Holding,
@@ -559,6 +561,69 @@ export const recipeApi = {
   },
 }
 
+/**
+ * Climbing — the fourth life app, on its own table. A session comes back whole, climbs
+ * included, and a save replaces it whole: the climb list's order is its meaning, and a
+ * half-written session is not a state worth having an opinion about.
+ */
+export const climbingApi = {
+  async list(): Promise<ClimbingSession[]> {
+    const { data } = await api.get('/climbing')
+    return data.sessions ?? []
+  },
+
+  async get(id: string): Promise<ClimbingSession> {
+    const { data } = await api.get(`/climbing/${id}`)
+    return data.session
+  },
+
+  async create(input: SessionInput): Promise<ClimbingSession> {
+    const { data } = await api.post('/climbing', input)
+    return data.session
+  },
+
+  async update(id: string, input: SessionInput): Promise<ClimbingSession> {
+    const { data } = await api.put(`/climbing/${id}`, input)
+    return data.session
+  },
+
+  async remove(id: string): Promise<void> {
+    await api.delete(`/climbing/${id}`)
+  },
+}
+
+/**
+ * Object storage, shared by whatever app needs a file. Bytes never pass through this
+ * client's `api` instance: `uploadUrl` returns a presigned `PUT` the browser writes to
+ * directly, and `viewUrls` returns presigned `GET`s to render from.
+ */
+export const mediaApi = {
+  /** False when the server has no bucket configured; the UI hides its upload buttons. */
+  async isEnabled(): Promise<boolean> {
+    const { data } = await api.get('/media/status')
+    return Boolean(data.enabled)
+  },
+
+  async uploadUrl(contentType: string): Promise<UploadTicket> {
+    const { data } = await api.post('/media/upload-url', { contentType })
+    return data
+  },
+
+  /**
+   * One call for a whole page of keys. Signing is local on the server, so batching costs
+   * nothing there and saves a round trip per thumbnail here.
+   */
+  async viewUrls(keys: string[]): Promise<Record<string, string>> {
+    if (keys.length === 0) return {}
+    const { data } = await api.post('/media/view-urls', { keys })
+    return data.urls ?? {}
+  },
+
+  async remove(key: string): Promise<void> {
+    await api.delete('/media', { data: { key } })
+  },
+}
+
 export const metadataApi = {
   async getMetadata(): Promise<ExpenseMetadata> {
     const { data } = await api.get('/metadata')
@@ -652,5 +717,20 @@ export const voiceApi = {
     form.append('currencies', JSON.stringify(currencies))
     const { data } = await api.post('/voice/parse', form, { signal })
     return data
+  },
+
+  /**
+   * The words as spoken, with no LLM pass behind them — for a plain text field that would
+   * rather be dictated than typed. `parseVoiceRecording` above is the expense flow, which
+   * transcribes and then interprets; this deliberately stops after the first half.
+   */
+  async transcribe(audioBlob: Blob, signal?: AbortSignal): Promise<string> {
+    const form = new FormData()
+    const ext = audioBlob.type.includes('ogg') ? 'ogg' :
+                audioBlob.type.includes('mp4') ? 'mp4' :
+                audioBlob.type.includes('wav') ? 'wav' : 'webm'
+    form.append('audio', audioBlob, `recording.${ext}`)
+    const { data } = await api.post('/voice/transcribe', form, { signal })
+    return data.transcript ?? ''
   },
 }
