@@ -9,14 +9,25 @@ declare global {
   }
 }
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+/**
+ * Pulls the bearer token off a request, or null when there isn't one. Shared so the
+ * renewal endpoint can read a token that `authMiddleware` would have rejected for
+ * being expired — renewal is exactly the case where an expired token is expected.
+ */
+export function readBearerToken(req: Request): string | null {
   const authHeader = req.headers.authorization
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
+
+  return authHeader.slice(7)
+}
+
+export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+  const token = readBearerToken(req)
+
+  if (!token) {
     return res.status(401).json({ error: 'Missing or invalid authorization header' })
   }
-
-  const token = authHeader.slice(7)
 
   try {
     const payload = authService.verify(token)

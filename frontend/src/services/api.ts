@@ -69,48 +69,145 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
 })
 
-// Attach JWT to every request
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    /** Marks the single retry after a renewal, so a second 401 cannot loop. */
+    skipAuthRetry?: boolean
   }
+}
+
+const TOKEN_KEY = 'token'
+
+const getToken = (): string | null => localStorage.getItem(TOKEN_KEY)
+const setToken = (token: string): void => localStorage.setItem(TOKEN_KEY, token)
+const clearToken = (): void => localStorage.removeItem(TOKEN_KEY)
+
+/**
+ * Renewal is attempted this long before a token actually dies. Comfortably shorter than
+ * the server's 7 days, comfortably longer than any request, so an open session crosses
+ * the threshold on an ordinary page load rather than mid-session.
+ */
+const RENEW_WHEN_REMAINING_MS = 24 * 60 * 60 * 1000
+
+const isRefreshRequest = (url: string | undefined): boolean => !!url?.endsWith('/auth/refresh')
+
+/** Reads `exp` out of the JWT payload. Returns null for anything unreadable, which the
+ *  caller treats as "unknown, leave it to the server". */
+function tokenExpiry(token: string): number | null {
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return null
+    const claims = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
+    return typeof claims?.exp === 'number' ? claims.exp * 1000 : null
+  } catch {
+    return null
+  }
+}
+
+function expiresSoon(token: string): boolean {
+  const expiry = tokenExpiry(token)
+  return expiry !== null && expiry - Date.now() < RENEW_WHEN_REMAINING_MS
+}
+
+/**
+ * One renewal at a time. Every request fired while a renewal is in flight awaits the
+ * same promise instead of each racing the server with its own copy of the old token.
+ */
+let renewal: Promise<string> | null = null
+
+function renewSession(): Promise<string> {
+  renewal ??= api
+    .post<{ token: string }>('/auth/refresh')
+    .then(({ data }) => {
+      setToken(data.token)
+      return data.token
+    })
+    .catch((error: unknown) => {
+      // Renewal failing means the session is over, not that the request failed.
+      clearToken()
+      throw error
+    })
+    .finally(() => {
+      renewal = null
+    })
+
+  return renewal
+}
+
+// Attach JWT to every request, renewing first when the current one is nearly spent
+api.interceptors.request.use(async (config) => {
+  const token = getToken()
+  if (!token) return config
+
+  if (!isRefreshRequest(config.url) && expiresSoon(token)) {
+    try {
+      config.headers.Authorization = `Bearer ${await renewSession()}`
+      return config
+    } catch {
+      // Renewal already cleared the token; send what we have and let the response
+      // interceptor decide what a rejection means.
+      config.headers.Authorization = `Bearer ${token}`
+      return config
+    }
+  }
+
+  config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
-// A failed passkey sign-in legitimately 401s while signed out. Letting the handler
-// below fire on it would clear storage and hard-navigate, throwing away the error the
-// login page is about to render — so these two are exempt.
+// A failed sign-in legitimately 401s while already signed out. Letting the handler below
+// fire on one would clear storage and hard-navigate, throwing away the error the login
+// page is about to render — so these are exempt.
 const PASSKEY_LOGIN_PATHS = ['/passkeys/login/options', '/passkeys/login/verify']
+const LOGIN_PATHS = ['/auth/login', ...PASSKEY_LOGIN_PATHS]
+
+function redirectToLogin(): void {
+  // Nothing to renew with, so there is nothing to retry: the session is genuinely over.
+  clearToken()
+  // The login page renders signed-out errors of its own; navigating again would just
+  // reload it, and a 401 that survives that reload would reload it forever.
+  if (window.location.pathname === '/login') return
+  window.location.href = '/login'
+}
 
 // Handle 401 responses
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    const url = error.config?.url ?? ''
-    const isPasskeyLogin = PASSKEY_LOGIN_PATHS.some((path) => url.endsWith(path))
+  async (error) => {
+    if (error.response?.status !== 401) return Promise.reject(error)
 
-    if (error.response?.status === 401 && !isPasskeyLogin) {
-      localStorage.removeItem('token')
-      window.location.href = '/login'
+    const url = error.config?.url ?? ''
+    if (LOGIN_PATHS.some((path) => url.endsWith(path))) return Promise.reject(error)
+
+    if (isRefreshRequest(url) || error.config?.skipAuthRetry || !getToken()) {
+      redirectToLogin()
+      return Promise.reject(error)
     }
-    return Promise.reject(error)
+
+    try {
+      const token = await renewSession()
+      error.config.headers.Authorization = `Bearer ${token}`
+      error.config.skipAuthRetry = true
+      return api.request(error.config)
+    } catch {
+      return Promise.reject(error)
+    }
   }
 )
 
 export const authApi = {
   async login(username: string, password: string): Promise<string> {
     const { data } = await api.post('/auth/login', { username, password })
-    localStorage.setItem('token', data.token)
+    setToken(data.token)
     return data.token
   },
 
   logout() {
-    localStorage.removeItem('token')
+    clearToken()
   },
 
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('token')
+    return !!getToken()
   },
 }
 
@@ -189,7 +286,7 @@ export const passkeyApi = {
     }
 
     const { data } = await api.post('/passkeys/login/verify', { response })
-    localStorage.setItem('token', data.token)
+    setToken(data.token)
     return data.token
   },
 }
