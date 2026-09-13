@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { mediaApi } from '../../services/api'
-import { rejectionReason, sourceRejectionReason, uploadMedia } from '../../utils/uploadMedia'
-import { compressImage } from '../../utils/compressImage'
+import { sourceRejectionReason } from '../../utils/uploadMedia'
+import { isVideoFile, processMediaFile, type MediaPhase } from '../../utils/processMedia'
+import { MediaProgressOverlay } from './MediaProgressOverlay'
 import { MediaViewer } from './MediaViewer'
 import type { MediaRef } from '../../types/climbing'
 
@@ -25,7 +26,7 @@ interface Pending {
   id: string
   previewUrl: string
   isVideo: boolean
-  phase: 'queued' | 'compressing' | 'uploading'
+  phase: MediaPhase
   /** 0–1 within the current phase. */
   progress: number
   abort: AbortController
@@ -71,7 +72,7 @@ export function MediaStrip({ items, urls, readOnly = false, onChange }: MediaStr
         entry: {
           id: crypto.randomUUID(),
           previewUrl,
-          isVideo: file.type.startsWith('video/'),
+          isVideo: isVideoFile(file),
           phase: 'queued' as const,
           progress: 0,
           abort: new AbortController(),
@@ -94,61 +95,14 @@ export function MediaStrip({ items, urls, readOnly = false, onChange }: MediaStr
       }
 
       try {
-        // Compress first, then check the ceiling: the raw file off a camera is routinely
-        // over a limit the compressed one comes in comfortably under.
-        update(entry.id, { phase: 'compressing', progress: 0 })
-
-        let payload: File
-        let poster: Blob | null = null
-
-        if (entry.isVideo) {
-          // Imported here rather than at the top: the demuxer and muxer are the better part
-          // of 60 kB gzipped, and most visits to a session never add a clip.
-          const [{ compressVideo }, { posterFromVideo }] = await Promise.all([
-            import('../../utils/compressVideo'),
-            import('../../utils/videoPoster'),
-          ])
-
-          const compressed = await compressVideo(
-            file,
-            (progress) => update(entry.id, { progress }),
-            entry.abort.signal
-          )
-          payload = compressed.file
-          // A transcode hands back a frame for free. Anything that skipped it — a clip
-          // already small enough to leave alone — needs one taken the slow way.
-          poster = compressed.poster ?? (await posterFromVideo(payload))
-        } else {
-          payload = await compressImage(file)
-        }
-
-        const reason = rejectionReason(payload)
-        if (reason) {
-          setError(reason)
-          continue
-        }
-
-        update(entry.id, { phase: 'uploading', progress: 0 })
-
-        const ref = await uploadMedia(
-          payload,
-          (progress) => update(entry.id, { progress }),
+        // Compress, upload, thumbnail — the whole pipeline, shared with the media tray.
+        const ref = await processMediaFile(
+          file,
+          (phase, progress) => update(entry.id, { phase, progress }),
           entry.abort.signal
         )
 
-        // Uploaded after the clip, and never allowed to fail it: a video with no thumbnail
-        // still plays, and the strip falls back to a video element for it.
-        let posterKey: string | undefined
-        if (poster) {
-          try {
-            const still = new File([poster], 'poster.jpg', { type: 'image/jpeg' })
-            posterKey = (await uploadMedia(still, () => {}, entry.abort.signal)).key
-          } catch (err) {
-            console.warn('Thumbnail upload failed; falling back to a video element:', err)
-          }
-        }
-
-        onChange([...itemsRef.current, { ...ref, ...(posterKey && { posterKey }) }])
+        onChange([...itemsRef.current, ref])
       } catch (err) {
         // A cancel is a choice, not a failure — the thumbnail simply goes away.
         if (!(err instanceof DOMException && err.name === 'AbortError')) {
@@ -245,35 +199,7 @@ export function MediaStrip({ items, urls, readOnly = false, onChange }: MediaStr
               <img src={p.previewUrl} alt="" className="w-full h-full object-cover opacity-30" />
             )}
 
-            <span
-              className="absolute inset-0 flex flex-col items-center justify-center gap-0.5"
-              role="progressbar"
-              aria-label={p.phase === 'compressing' ? 'Compressing' : 'Uploading'}
-              aria-valuenow={p.phase === 'queued' ? undefined : Math.round(p.progress * 100)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <span className="text-[11px] font-semibold text-sky-300 tabular-nums leading-none">
-                {p.phase === 'queued' ? '···' : `${Math.round(p.progress * 100)}%`}
-              </span>
-              {/* Naming the slow phase is the difference between "working" and "stuck". */}
-              {p.phase === 'compressing' && (
-                <span className="text-[8px] uppercase tracking-wide text-zinc-400 leading-none">
-                  shrinking
-                </span>
-              )}
-            </span>
-
-            {/* Sits on the bottom edge so it reads at a glance even at 64px. Compressing is
-                the paler half of the bar, so the two phases are distinguishable. */}
-            <span className="absolute bottom-0 inset-x-0 h-1 bg-zinc-900/80">
-              <span
-                className={`block h-full transition-[width] duration-200 ease-out ${
-                  p.phase === 'compressing' ? 'bg-sky-400/50' : 'bg-sky-400'
-                }`}
-                style={{ width: `${p.phase === 'queued' ? 0 : p.progress * 100}%` }}
-              />
-            </span>
+            <MediaProgressOverlay phase={p.phase} progress={p.progress} />
 
             <button
               type="button"

@@ -61,7 +61,9 @@ function toStored(input: SessionInput): Omit<ClimbingSession, 'id' | 'createdAt'
 
       return {
         id: climb.id ?? uuidv4(),
-        outcome: climb.outcome,
+        // Conditional spread, not `outcome: climb.outcome`: DynamoDB rejects a literal
+        // `undefined` attribute, so a nameless climb has to omit the key entirely.
+        ...(climb.outcome && { outcome: climb.outcome }),
         ...(grade && { grade }),
         ...(description && { description }),
         ...(media && media.length > 0 && { media }),

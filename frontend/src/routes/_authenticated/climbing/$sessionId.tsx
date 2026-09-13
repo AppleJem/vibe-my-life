@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { ClimbRow } from '../../../components/Climbing/ClimbRow'
+import { MediaTray } from '../../../components/Climbing/MediaTray'
 import { GradeSystemPicker } from '../../../components/Climbing/GradeSystemPicker'
 import { LocationInput } from '../../../components/Climbing/LocationInput'
 import { DatePicker } from '../../../components/ExpenseTracker/AddExpenseModal/DatePicker'
@@ -249,10 +250,22 @@ function SessionPage() {
 
       <button
         onClick={addClimb}
-        className="w-full rounded-xl bg-zinc-900 border border-dashed border-zinc-700 py-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-sky-400/50 transition-colors mt-3 mb-8"
+        className="w-full rounded-xl bg-zinc-900 border border-dashed border-zinc-700 py-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-sky-400/50 transition-colors mt-3"
       >
         + Add climb
       </button>
+
+      {/* Sorts a batch of clips into climbs before anything is uploaded — the tray owns
+          that state, and the draft only changes when it is confirmed. */}
+      {mediaEnabled && (
+        <MediaTray
+          climbs={draft.climbs as Climb[]}
+          onChangeClimbs={(climbs) => patch({ climbs })}
+          onOpenEditing={(ids) =>
+            setEditingIds((current) => new Set([...current, ...ids]))
+          }
+        />
+      )}
 
       <ConfirmDialog
         isOpen={confirmingDelete}

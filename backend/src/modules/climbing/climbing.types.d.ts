@@ -50,7 +50,13 @@ export interface MediaRef {
 export interface Climb {
   /** Stable across saves, so reordering doesn't make a row look like a different one. */
   id: string
-  outcome: ClimbOutcome
+  /**
+   * Absent on a climb that exists only to hold media — logged from the car park before
+   * anyone has decided how it went. Every other field is optional too, so there is nothing
+   * unusual about the shape; only the counters (`solveCount` and friends) care, and they
+   * compare against specific values, so an absent outcome simply isn't counted.
+   */
+  outcome?: ClimbOutcome
   /**
    * Held as text in both grade kinds. An integer-graded session stores "5", not 5 — which
    * keeps one field, one validation, and no migration when a session switches systems
@@ -82,7 +88,7 @@ export interface SessionInput {
   gradeKind: GradeKind
   climbs: {
     id?: string
-    outcome: ClimbOutcome
+    outcome?: ClimbOutcome
     grade?: string
     description?: string
     media?: {

@@ -1,7 +1,7 @@
 import { DescriptionField } from './DescriptionField'
 import { GradeField } from './GradeField'
 import { MediaStrip } from './MediaStrip'
-import { OUTCOMES, formatGrade, outcomeMeta } from '../../utils/climbing'
+import { OUTCOMES, UNLOGGED_META, formatGrade, outcomeMeta } from '../../utils/climbing'
 import type { Climb, ClimbOutcome, GradeKind, MediaRef } from '../../types/climbing'
 
 interface ClimbRowProps {
@@ -67,11 +67,17 @@ export function ClimbRow({
 
         {editing ? (
           <select
-            value={climb.outcome}
-            onChange={(e) => patch({ outcome: e.target.value as ClimbOutcome })}
+            value={climb.outcome ?? ''}
+            onChange={(e) =>
+              patch({ outcome: e.target.value ? (e.target.value as ClimbOutcome) : undefined })
+            }
             aria-label="Outcome"
             className={`flex-1 min-w-0 bg-transparent text-sm font-medium focus:outline-none ${meta.text}`}
           >
+            {/* First, so "nothing yet" sits above the results rather than among them. */}
+            <option value="" className="bg-zinc-800 text-zinc-100">
+              {UNLOGGED_META.label}
+            </option>
             {OUTCOMES.map((option) => (
               <option key={option.value} value={option.value} className="bg-zinc-800 text-zinc-100">
                 {option.label}

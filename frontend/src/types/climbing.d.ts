@@ -40,7 +40,12 @@ export interface MediaRef {
 
 export interface Climb {
   id: string
-  outcome: ClimbOutcome
+  /**
+   * Absent on a climb logged only to hold media — created from the media tray before
+   * anyone has decided how it went. `outcomeMeta` renders that state; the outcome
+   * counters compare against specific values and so simply don't count it.
+   */
+  outcome?: ClimbOutcome
   /** Text in both grade kinds — an integer session holds "5", not 5. */
   grade?: string
   description?: string
@@ -67,7 +72,7 @@ export interface SessionInput {
   gradeKind: GradeKind
   climbs: {
     id?: string
-    outcome: ClimbOutcome
+    outcome?: ClimbOutcome
     grade?: string
     description?: string
     media?: MediaRef[]

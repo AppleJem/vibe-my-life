@@ -19,7 +19,12 @@ const mediaSchema = z.object({
 const climbSchema = z.object({
   // Present on an edit, absent on a row the session screen just added.
   id: z.string().min(1).optional(),
-  outcome: z.enum(['flashed', 'solved', 'projecting', 'attempted', 'given-up']),
+  /**
+   * Optional: a climb created only to hold a video has no result yet, and recording the
+   * clip is the reason to log it at all. Whether a nameless climb is acceptable is the
+   * client's call, not the API's.
+   */
+  outcome: z.enum(['flashed', 'solved', 'projecting', 'attempted', 'given-up']).optional(),
   // Free text in both grade kinds — an integer session sends "5", not 5.
   grade: z.string().max(24).optional(),
   description: z.string().max(2000).optional(),

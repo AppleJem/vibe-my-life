@@ -26,8 +26,30 @@ export const OUTCOMES: { value: ClimbOutcome; label: string; dot: string; text: 
   { value: 'given-up', label: 'Given up', dot: 'bg-zinc-500', text: 'text-zinc-500' },
 ]
 
-export const outcomeMeta = (outcome: ClimbOutcome) =>
-  OUTCOMES.find((o) => o.value === outcome) ?? OUTCOMES[2]
+/** The presentational half of an outcome. `OUTCOMES` carries a `value` too; this is the rest. */
+export type OutcomeMeta = { label: string; dot: string; text: string }
+
+/**
+ * How a climb with no outcome recorded yet reads.
+ *
+ * Deliberately not a member of `OUTCOMES`: that list is the set of things a climb can be
+ * *judged* as, and this is the absence of a judgement. Keeping it out means it can never
+ * be offered as something to pick — only as something to clear back to.
+ */
+export const UNLOGGED_META: OutcomeMeta = {
+  label: 'Not logged',
+  dot: 'bg-zinc-600',
+  text: 'text-zinc-500',
+}
+
+/**
+ * Falls back to `OUTCOMES[2]` (projecting) for a value it doesn't recognise, which is
+ * corruption rather than absence — an unrecognised outcome is still one somebody chose.
+ * Absence gets `UNLOGGED_META` instead, and must: reading a nameless climb as "projecting"
+ * would state a result nobody recorded.
+ */
+export const outcomeMeta = (outcome?: ClimbOutcome): OutcomeMeta =>
+  outcome ? OUTCOMES.find((o) => o.value === outcome) ?? OUTCOMES[2] : UNLOGGED_META
 
 /** Today as `YYYY-MM-DD` in local time — never `toISOString()`, which is UTC and off by a day. */
 export function todayStr(): string {
