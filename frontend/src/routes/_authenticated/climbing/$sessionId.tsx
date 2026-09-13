@@ -6,6 +6,7 @@ import { GradeSystemPicker } from '../../../components/Climbing/GradeSystemPicke
 import { LocationInput } from '../../../components/Climbing/LocationInput'
 import { DatePicker } from '../../../components/ExpenseTracker/AddExpenseModal/DatePicker'
 import { ConfirmDialog } from '../../../components/ConfirmDialog'
+import { mediaApi } from '../../../services/api'
 import { useKnownLocations, useSession } from '../../../hooks/useClimbing'
 import { useMediaEnabled, useMediaUrls } from '../../../hooks/useMediaUrls'
 import { useDebounce } from '../../../hooks/useDebounce'
@@ -27,6 +28,25 @@ const toInput = (session: ClimbingSession): SessionInput => ({
   gradeKind: session.gradeKind,
   climbs: session.climbs,
 })
+
+/**
+ * What deleting a climb would take with it, or null when the row is empty enough to just
+ * go.
+ *
+ * An outcome and a grade are one tap to put back. Notes typed standing at the wall, and
+ * clips already compressed and uploaded, are not — so those are what earn a prompt.
+ */
+function lossMessage(climb: Pick<Climb, 'description' | 'media'>): string | null {
+  const notes = Boolean(climb.description?.trim())
+  const count = climb.media?.length ?? 0
+
+  if (!notes && count === 0) return null
+
+  const media = count === 1 ? '1 photo or clip' : `${count} photos and clips`
+  if (notes && count > 0) return `Its notes and ${media} go too.`
+  if (notes) return 'Its notes go too.'
+  return `Its ${media} go too.`
+}
 
 function SessionPage() {
   const { sessionId } = Route.useParams()
@@ -67,6 +87,8 @@ function SessionPage() {
     })
   const [editingHeader, setEditingHeader] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  /** The climb awaiting a delete confirmation, when it has something worth asking about. */
+  const [confirmingRemoveClimb, setConfirmingRemoveClimb] = useState<string | null>(null)
 
   // The draft is seeded once. Re-seeding on every server response would stamp on whatever
   // was typed while a save was in flight.
@@ -160,12 +182,36 @@ function SessionPage() {
   }
 
   const removeClimb = (id: string) => {
+    // The climb's own objects go with it. The session record is the only index of what's
+    // in the bucket, so a key dropped from the draft without being deleted is stranded
+    // there for good — unreachable, and nothing left that could ever find it again.
+    const doomed = draft.climbs.find((climb) => climb.id === id)
+    for (const item of doomed?.media ?? []) void mediaApi.removeRef(item)
+
     patch({ climbs: draft.climbs.filter((climb) => climb.id !== id) })
     setEditing(id, false)
   }
 
+  /**
+   * Asks first when the row is carrying something. A prompt on every remove would train
+   * you to dismiss it without reading, so an unremarkable climb still just goes.
+   */
+  const requestRemoveClimb = (id: string) => {
+    const doomed = draft.climbs.find((climb) => climb.id === id)
+    if (doomed && lossMessage(doomed)) {
+      setConfirmingRemoveClimb(id)
+      return
+    }
+    removeClimb(id)
+  }
+
   const solves = solveCount(draft.climbs as Climb[])
   const unsaved = serialised !== savedRef.current
+
+  // Non-null exactly when a climb is awaiting confirmation, so the dialog can't stay open
+  // for a row that has since lost whatever it was asking about.
+  const climbPendingRemoval = draft.climbs.find((climb) => climb.id === confirmingRemoveClimb)
+  const pendingLoss = climbPendingRemoval ? lossMessage(climbPendingRemoval) : null
 
   return (
     <>
@@ -243,7 +289,7 @@ function SessionPage() {
             onChange={patchClimb}
             onDone={() => setEditing(climb.id, false)}
             onEdit={() => setEditing(climb.id, true)}
-            onRemove={() => removeClimb(climb.id)}
+            onRemove={() => requestRemoveClimb(climb.id)}
           />
         ))}
       </ul>
@@ -270,14 +316,35 @@ function SessionPage() {
       <ConfirmDialog
         isOpen={confirmingDelete}
         title="Delete this session?"
-        message="The climbs logged in it go too. This can't be undone."
+        message="The climbs logged in it — and every photo and clip on them — go too. This can't be undone."
         confirmLabel="Delete"
         tone="danger"
         onConfirm={async () => {
           await deleteSession()
+
+          // The session record was the only index of these keys, so they have to go with
+          // it — anything left behind is unreachable and nothing could ever find it again.
+          // `allKeys` is the same set the page signs URLs for, posters included. Each
+          // delete is swallowed: a stray file is invisible and costs pennies, whereas a
+          // rejection here would strand the user on a session that no longer exists.
+          await Promise.all(allKeys.map((key) => mediaApi.remove(key).catch(() => undefined)))
+
           navigate({ to: '/climbing' })
         }}
         onCancel={() => setConfirmingDelete(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingLoss !== null}
+        title="Delete this climb?"
+        message={pendingLoss ?? ''}
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => {
+          if (confirmingRemoveClimb) removeClimb(confirmingRemoveClimb)
+          setConfirmingRemoveClimb(null)
+        }}
+        onCancel={() => setConfirmingRemoveClimb(null)}
       />
     </>
   )

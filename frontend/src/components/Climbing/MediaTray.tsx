@@ -45,6 +45,25 @@ interface StagedFile {
 }
 
 /**
+ * The not-yet-existing climbs a set of staged files points at, in the order first seen.
+ *
+ * Derived rather than stored. Storing it meant a `setState` in an effect keyed on `staged`,
+ * and `staged` is rewritten on every progress tick of a video encode — the two together
+ * drove React past its nested-update guard mid-shrink. Deriving also gives the behaviour
+ * we want for free: a group exists exactly as long as some file points at it, so no empty
+ * `N2` chip lingers after its last file moves away.
+ */
+function collectGroups(files: StagedFile[]): string[] {
+  const groups: string[] = []
+  for (const file of files) {
+    if (file.target?.startsWith(NEW_PREFIX) && !groups.includes(file.target)) {
+      groups.push(file.target)
+    }
+  }
+  return groups
+}
+
+/**
  * Picks up to five photos and clips, lets you say which climb each belongs to, and uploads
  * the lot on Confirm.
  *
@@ -55,7 +74,6 @@ interface StagedFile {
 export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayProps) {
   const fileInput = useRef<HTMLInputElement>(null)
   const [staged, setStaged] = useState<StagedFile[]>([])
-  const [groups, setGroups] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
 
@@ -74,26 +92,31 @@ export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayPr
   climbsRef.current = climbs
   const stagedRef = useRef(staged)
   stagedRef.current = staged
-  const groupsRef = useRef(groups)
-  groupsRef.current = groups
 
   const abortRef = useRef<AbortController | null>(null)
   const nextGroup = useRef(1)
 
-  /**
-   * A group no file points at has nothing to attach to, so it goes rather than lingering
-   * as an empty `N2` chip on every row. Returning the same array when nothing changed lets
-   * React bail out — this runs on every progress tick too.
-   */
-  useEffect(() => {
-    setGroups((current) => {
-      const next = current.filter((group) => staged.some((file) => file.target === group))
-      return next.length === current.length ? current : next
-    })
-  }, [staged])
-
   const update = (id: string, changes: Partial<StagedFile>) =>
     setStaged((current) => current.map((f) => (f.id === id ? { ...f, ...changes } : f)))
+
+  /**
+   * Progress arrives once per decoded frame — hundreds a second on a clip — and each one
+   * used to re-render the whole tray. The overlay only ever shows a whole percentage, so
+   * anything finer is dropped: no visual difference, and roughly a hundredfold fewer
+   * renders. Returning `current` when nothing moved lets React bail out entirely.
+   */
+  const reportProgress = (id: string, phase: MediaPhase, progress: number) =>
+    setStaged((current) => {
+      const file = current.find((f) => f.id === id)
+      if (!file) return current
+      if (
+        file.phase === phase &&
+        Math.round(file.progress * 100) === Math.round(progress * 100)
+      ) {
+        return current
+      }
+      return current.map((f) => (f.id === id ? { ...f, phase, progress } : f))
+    })
 
   const drop = (id: string) => {
     setStaged((current) => {
@@ -149,10 +172,12 @@ export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayPr
     }
   }
 
+  /**
+   * Points a file at a brand new climb. The group exists only because a file references it,
+   * so tapping `+` twice on the same file just moves it to the newer one.
+   */
   const addGroup = (fileId: string) => {
-    const group = `${NEW_PREFIX}${nextGroup.current++}`
-    setGroups((current) => [...current, group])
-    update(fileId, { target: group, error: null })
+    update(fileId, { target: `${NEW_PREFIX}${nextGroup.current++}`, error: null })
   }
 
   /** Tapping the chip a file is already on clears it, so a mis-tap is one more tap. */
@@ -164,7 +189,6 @@ export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayPr
   const clear = () => {
     abortRef.current?.abort()
     setStaged([])
-    setGroups([])
     setError(null)
   }
 
@@ -199,7 +223,7 @@ export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayPr
       // otherwise leave empty nameless rows behind.
       const created: Climb[] = []
       const realId = new Map<string, string>()
-      for (const group of groupsRef.current) {
+      for (const group of collectGroups(queued)) {
         const id = crypto.randomUUID()
         realId.set(group, id)
         created.push({ id })
@@ -221,7 +245,6 @@ export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayPr
               : file
           )
         )
-        setGroups([])
       }
 
       // Sequential, never parallel: a handful of phone videos at once saturates the
@@ -236,7 +259,7 @@ export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayPr
         try {
           const ref = await processMediaFile(
             file.file,
-            (phase, progress) => update(file.id, { phase, progress }),
+            (phase, progress) => reportProgress(file.id, phase, progress),
             controller.signal
           )
 
@@ -263,8 +286,8 @@ export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayPr
     }
   }
 
+  const groups = collectGroups(staged)
   const assigned = staged.filter((f) => f.target).length
-  const usedGroups = groups.filter((g) => staged.some((f) => f.target === g))
   const allAssigned = staged.length > 0 && assigned === staged.length
 
   return (
@@ -288,7 +311,7 @@ export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayPr
               <div className="relative w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-zinc-800">
                 {item.isVideo ? (
                   item.posterUrl ? (
-                    <img src={item.posterUrl} alt="" className="w-full h-full object-cover brightness-50 opacity-30" />
+                    <img src={item.posterUrl} alt="" className={`w-full h-full object-cover ${running ? 'brightness-50 opacity-30' : ''}`} />
                   ) : (
                     <video
                       src={item.previewUrl}
@@ -383,8 +406,8 @@ export function MediaTray({ climbs, onChangeClimbs, onOpenEditing }: MediaTrayPr
       {staged.length > 0 && (
         <p className="mt-1.5 text-xs text-zinc-600">
           {assigned} of {staged.length} assigned
-          {usedGroups.length > 0 &&
-            ` · will add ${usedGroups.length} new ${usedGroups.length === 1 ? 'climb' : 'climbs'}`}
+          {groups.length > 0 &&
+            ` · will add ${groups.length} new ${groups.length === 1 ? 'climb' : 'climbs'}`}
         </p>
       )}
 

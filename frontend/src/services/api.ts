@@ -31,7 +31,7 @@ import type {
   SaveActionListInput,
 } from '../types/habit'
 import type { Recipe, RecipeInput, RecipeDraft } from '../types/recipe'
-import type { ClimbingSession, SessionInput } from '../types/climbing'
+import type { ClimbingSession, MediaRef, SessionInput } from '../types/climbing'
 import type { UploadTicket } from '../types/media'
 import type { Category } from '../constants/categories'
 import type {
@@ -718,6 +718,19 @@ export const mediaApi = {
 
   async remove(key: string): Promise<void> {
     await api.delete('/media', { data: { key } })
+  },
+
+  /**
+   * Deletes one stored item, and its thumbnail when it has one.
+   *
+   * Failures are swallowed on purpose. A delete that doesn't land leaves a stray file in
+   * the bucket, which is invisible and costs pennies; letting it reject turns a stray file
+   * into an error dialog over something the user has already been told is gone. Every
+   * caller is fire-and-forget for the same reason.
+   */
+  async removeRef(item: MediaRef): Promise<void> {
+    await mediaApi.remove(item.key).catch(() => undefined)
+    if (item.posterKey) await mediaApi.remove(item.posterKey).catch(() => undefined)
   },
 }
 

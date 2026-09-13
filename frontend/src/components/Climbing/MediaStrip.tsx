@@ -118,8 +118,7 @@ export function MediaStrip({ items, urls, readOnly = false, onChange }: MediaStr
     onChange(items.filter((i) => i.id !== item.id))
     // Fire and forget: the record no longer points at either object, and a failed delete is
     // a stray file rather than a broken climb.
-    void mediaApi.remove(item.key).catch(() => undefined)
-    if (item.posterKey) void mediaApi.remove(item.posterKey).catch(() => undefined)
+    void mediaApi.removeRef(item)
   }
 
   if (readOnly && items.length === 0) return null
