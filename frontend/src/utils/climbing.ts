@@ -84,11 +84,17 @@ function levelFor(climbCount: number): number {
 }
 
 /**
- * A rolling window ending today, oldest first — the GitHub contribution grid, thirty days
- * wide. Days with no session are present and empty rather than skipped, because the gaps
+ * A GitHub-style contribution grid: 7 rows (Sun–Sat) × N columns (weeks).
+ * Days with no session are present and empty rather than skipped, because the gaps
  * are what the picture is about.
+ *
+ * The grid always starts on a Sunday and the last column ends on a Saturday,
+ * so the day-of-week labels stay consistent. The grid includes the current week.
  */
-export function buildActivityGrid(sessions: ClimbingSession[], days = 30): ActivityCell[] {
+export function buildActivityGrid(
+  sessions: ClimbingSession[],
+  columns = 16,
+): ActivityCell[] {
   const byDate = new Map<string, { climbCount: number; sessionIds: string[] }>()
 
   for (const session of sessions) {
@@ -98,13 +104,21 @@ export function buildActivityGrid(sessions: ClimbingSession[], days = 30): Activ
     byDate.set(session.date, entry)
   }
 
-  const end = todayStr()
+  const today = todayStr()
+  const todayWeekday = weekdayOf(today) // 0 = Sunday
 
-  return Array.from({ length: days }, (_, i) => {
-    const date = addDays(end, i - (days - 1))
+  // Start from the most recent Sunday (beginning of current week).
+  // If today is Sunday, this is today; otherwise go back to last Sunday.
+  const currentWeekStart = addDays(today, -todayWeekday)
+
+  // Go back (columns - 1) weeks to get the first column's start.
+  const startDate = addDays(currentWeekStart, -(columns - 1) * 7)
+
+  const totalDays = columns * 7
+
+  return Array.from({ length: totalDays }, (_, i) => {
+    const date = addDays(startDate, i)
     const entry = byDate.get(date)
-    // A session logged but not yet filled in still counts as a day you climbed — otherwise
-    // the grid reads as empty for the whole time you're at the wall.
     const climbCount = entry?.climbCount ?? 0
     const attended = entry !== undefined
 

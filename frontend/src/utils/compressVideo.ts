@@ -189,7 +189,7 @@ function avcDescription(mp4: ISOFile, trackId: number): Uint8Array {
     if (!box) continue
 
     const stream = new DataStream(undefined, 0, Endianness.BIG_ENDIAN)
-    ;(box as { write: (s: DataStream) => void }).write(stream)
+      ; (box as { write: (s: DataStream) => void }).write(stream)
     // The first 8 bytes are the box header, which the decoder does not want.
     return new Uint8Array(stream.buffer, 8)
   }
@@ -294,7 +294,7 @@ function aacLcConfig(sampleRate: number, channels: number): Uint8Array | null {
  */
 export async function compressVideo(
   file: File,
-  onProgress: (fraction: number) => void = () => {},
+  onProgress: (fraction: number) => void = () => { },
   signal?: AbortSignal
 ): Promise<VideoCompressionResult> {
   const original = { file, poster: null }
@@ -557,12 +557,14 @@ async function transcode(
         sample.is_sync ? 'key' : 'delta',
         (sample.cts * 1_000_000) / sample.timescale,
         (sample.duration * 1_000_000) / sample.timescale,
-        { decoderConfig: {
-          codec: 'mp4a.40.2',
-          sampleRate,
-          numberOfChannels: channels,
-          description: config!,
-        } }
+        {
+          decoderConfig: {
+            codec: 'mp4a.40.2',
+            sampleRate,
+            numberOfChannels: channels,
+            description: config!,
+          }
+        }
       )
     }
   }

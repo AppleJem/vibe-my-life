@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ACTIVITY_SHADES, buildActivityGrid, formatSessionDate, weekdayOf } from '../../utils/climbing'
+import { ACTIVITY_SHADES, buildActivityGrid, formatSessionDate } from '../../utils/climbing'
 import type { ClimbingSession } from '../../types/climbing'
 
 interface ActivityGridProps {
@@ -8,69 +8,86 @@ interface ActivityGridProps {
   onPickSession: (sessionId: string) => void
 }
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+/** Full weekday names for the row labels. */
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** Number of week columns to display. */
+const COLUMNS = 16
 
 /**
- * The last thirty days as a contribution grid — the picture the app opens on.
+ * A contribution grid — the picture the app opens on.
  *
  * Shade is climb count, in fixed buckets rather than a scale relative to the window, so a
  * shade means the same thing in March as it did in February. A day with a session but no
  * climbs logged yet still shades at level 1: you were at the wall, and reading the grid as
  * empty for the whole time you're there would be wrong.
  *
- * Leading blanks pad the first row so the columns line up under real weekday labels; the
- * rolling window means the grid starts on a different weekday every day.
+ * Layout: 7 rows (Sun–Sat) × 16 columns (weeks), with weekday labels on the left.
+ * The grid always starts on a Sunday and each column is a full week, so the day-of-week
+ * labels stay consistent.
  */
 export function ActivityGrid({ sessions, onPickSession }: ActivityGridProps) {
-  const cells = useMemo(() => buildActivityGrid(sessions), [sessions])
-  const leadingBlanks = cells.length > 0 ? weekdayOf(cells[0].date) : 0
+  const cells = useMemo(() => buildActivityGrid(sessions, COLUMNS), [sessions])
 
   const totalClimbs = cells.reduce((sum, cell) => sum + cell.climbCount, 0)
   const daysOn = cells.filter((cell) => cell.level > 0).length
 
+  // Group cells by week (column). Each week has 7 consecutive days, Sun–Sat.
+  const weeks: typeof cells[] = []
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7))
+  }
+
   return (
     <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4 mb-6">
       <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-sm font-semibold text-zinc-300">Last 30 days</h3>
+        <h3 className="text-sm font-semibold text-zinc-300">Last {COLUMNS} weeks</h3>
         <p className="text-xs text-zinc-500">
           {daysOn} {daysOn === 1 ? 'day' : 'days'} · {totalClimbs}{' '}
           {totalClimbs === 1 ? 'climb' : 'climbs'}
         </p>
       </div>
 
-      <div className="grid grid-cols-7 gap-1.5 mb-1.5">
-        {WEEKDAYS.map((label, i) => (
-          <span key={i} className="text-center text-[10px] text-zinc-600">
-            {label}
-          </span>
-        ))}
-      </div>
+      <div className="flex gap-1.5">
+        {/* Weekday labels on the left */}
+        <div className="flex flex-col gap-1.5">
+          {WEEKDAY_LABELS.map((label) => (
+            <span
+              key={label}
+              className="h-[18px] flex items-center text-[10px] text-zinc-600 pr-1"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
 
-      <div className="grid grid-cols-7 gap-1.5">
-        {Array.from({ length: leadingBlanks }, (_, i) => (
-          <div key={`blank-${i}`} aria-hidden />
-        ))}
+        {/* Grid: columns are weeks, rows are days of the week */}
+        <div className="flex gap-1.5 flex-1">
+          {weeks.map((week, weekIdx) => (
+            <div key={weekIdx} className="flex flex-col gap-1.5 flex-1">
+              {week.map((cell) => {
+                const climbable = cell.sessionIds.length > 0
+                const label = `${formatSessionDate(cell.date)}: ${
+                  climbable ? `${cell.climbCount} climbs` : 'no session'
+                }`
 
-        {cells.map((cell) => {
-          const climbable = cell.sessionIds.length > 0
-          const label = `${formatSessionDate(cell.date)}: ${
-            climbable ? `${cell.climbCount} climbs` : 'no session'
-          }`
-
-          return (
-            <button
-              key={cell.date}
-              type="button"
-              disabled={!climbable}
-              onClick={() => onPickSession(cell.sessionIds[0])}
-              title={label}
-              aria-label={label}
-              className={`aspect-square rounded-md transition-transform ${
-                ACTIVITY_SHADES[cell.level]
-              } ${climbable ? 'hover:scale-110 cursor-pointer' : 'cursor-default'}`}
-            />
-          )
-        })}
+                return (
+                  <button
+                    key={cell.date}
+                    type="button"
+                    disabled={!climbable}
+                    onClick={() => onPickSession(cell.sessionIds[0])}
+                    title={label}
+                    aria-label={label}
+                    className={`aspect-square rounded-[4px] transition-transform ${
+                      ACTIVITY_SHADES[cell.level]
+                    } ${climbable ? 'hover:scale-110 cursor-pointer' : 'cursor-default'}`}
+                  />
+                )
+              })}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="flex items-center justify-end gap-1.5 mt-3 text-[10px] text-zinc-600">
