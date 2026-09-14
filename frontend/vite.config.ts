@@ -10,7 +10,9 @@ export default defineConfig({
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' + useAppUpdate (virtual:pwa-register/react) lets us detect a
+      // new SW, show an in-app "Refresh" banner, and activate it on tap.
+      registerType: 'prompt',
       workbox: {
         // Pre-cache all built assets
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,mp3}'],
