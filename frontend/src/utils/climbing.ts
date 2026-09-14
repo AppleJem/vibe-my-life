@@ -1,4 +1,5 @@
 import type { Climb, ClimbOutcome, ClimbingSession } from '../types/climbing'
+import type { Habit } from '../types/habit'
 
 /**
  * The grading systems the picker offers. Not exhaustive and not meant to be — the gym
@@ -179,6 +180,36 @@ export const flashCount = (climbs: Climb[]) =>
 
 export const solveCount = (climbs: Climb[]) =>
   climbs.filter((climb) => climb.outcome === 'solved' || climb.outcome === 'flashed').length
+
+/** habitId → epoch ms of its last click. Read only by the training strip's ordering. */
+export const TRAINING_RECENCY_KEY = 'climbing:training:recent'
+
+/**
+ * The training strip's order: habits not yet done today first, then — within each
+ * partition — the ones clicked most recently, then alphabetical as a stable tiebreak.
+ *
+ * `recency` maps habit id to the epoch ms of its last click and comes from localStorage,
+ * so it is deliberately untrusted: a missing entry reads as `0`, which sorts last rather
+ * than throwing. `today` is passed in rather than read from the clock, the same discipline
+ * as `utils/habit.ts`, so the ordering is checkable.
+ */
+export function sortTrainingHabits(
+  habits: Habit[],
+  recency: Record<string, number>,
+  today: string
+): Habit[] {
+  const isDone = (habit: Habit) => habit.lastCompletedDate === today
+
+  return [...habits].sort((a, b) => {
+    const doneDiff = Number(isDone(a)) - Number(isDone(b))
+    if (doneDiff !== 0) return doneDiff
+
+    const recencyDiff = (recency[b.id] ?? 0) - (recency[a.id] ?? 0)
+    if (recencyDiff !== 0) return recencyDiff
+
+    return a.name.localeCompare(b.name)
+  })
+}
 /** A grade as it should read on screen: "V4", "6b+" — the system prefixed only when short. */
 export function formatGrade(grade: string, gradeSystem: string, kind: string): string {
   if (!grade) return ''

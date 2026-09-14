@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { habitActionApi, habitApi, habitGroupApi } from '../services/api'
-import { addDays, normaliseTag } from '../utils/habit'
+import { addDays, normaliseTag, polarityOf } from '../utils/habit'
 import { localToday } from '../utils/recurring'
 import type {
   Completion,
@@ -72,6 +72,88 @@ export function useArchivedHabits() {
     groups: data?.groups ?? [],
     loading: isPending,
     error: error ? 'Failed to load habits' : null,
+  }
+}
+
+/**
+ * The climbing training set, read off the same list query every other habit surface uses.
+ *
+ * `training` is a flag on the habit, so membership needs no endpoint and no join: the
+ * population the trainer can draw from is just the build, non-archived habits, and the
+ * set itself is that population filtered to `training`. Avoid habits are excluded on
+ * purpose — their `lastCompletedDate` is a *slip*, so "done today" would read upside down
+ * on the strip.
+ *
+ * `applyTraining` takes the whole desired set rather than a single toggle, because the
+ * modal is a draft confirmed once. It diffs against what is stored and writes the adds and
+ * removes in parallel, updating the list cache optimistically so the strip and training
+ * page move the moment Confirm is pressed.
+ */
+export function useTrainingHabits() {
+  const queryClient = useQueryClient()
+  const { data, isPending, error } = useHabitList()
+
+  /** Every habit training can contain: build and unarchived. The modal's list. */
+  const habits = useMemo(
+    () =>
+      (data?.habits ?? []).filter(
+        (habit) => !habit.archived && polarityOf(habit) === 'build'
+      ),
+    [data]
+  )
+
+  /** Those of them that are actually in training. The strip and the training page. */
+  const training = useMemo(() => habits.filter((habit) => habit.training), [habits])
+
+  const applyMutation = useMutation({
+    mutationFn: async (selectedIds: ReadonlySet<string>) => {
+      const current = new Set(habits.filter((habit) => habit.training).map((habit) => habit.id))
+      const added = [...selectedIds].filter((id) => !current.has(id))
+      const removed = [...current].filter((id) => !selectedIds.has(id))
+
+      await Promise.all([
+        ...added.map((id) => habitApi.update(id, { training: true })),
+        ...removed.map((id) => habitApi.update(id, { training: null })),
+      ])
+    },
+    onMutate: async (selectedIds) => {
+      await queryClient.cancelQueries({ queryKey: habitKeys.list() })
+      const previous = queryClient.getQueryData<Awaited<ReturnType<typeof habitApi.list>>>(
+        habitKeys.list()
+      )
+
+      queryClient.setQueryData<Awaited<ReturnType<typeof habitApi.list>>>(
+        habitKeys.list(),
+        (old) =>
+          old
+            ? {
+                ...old,
+                habits: old.habits.map((habit) => {
+                  if (selectedIds.has(habit.id)) return { ...habit, training: true }
+                  return habit.training ? { ...habit, training: undefined } : habit
+                }),
+              }
+            : old
+      )
+
+      return { previous }
+    },
+    onError: (_error, _selected, context) => {
+      if (context?.previous) queryClient.setQueryData(habitKeys.list(), context.previous)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: habitKeys.list() }),
+  })
+
+  return {
+    /** Every build, unarchived habit — what the modal offers. */
+    habits,
+    /** The subset currently in training — the strip and the training page. */
+    training,
+    groups: data?.groups ?? [],
+    loading: isPending,
+    error: error ? 'Failed to load habits' : null,
+    applyTraining: applyMutation.mutateAsync,
+    saving: applyMutation.isPending,
   }
 }
 

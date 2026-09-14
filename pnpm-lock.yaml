@@ -108,6 +108,9 @@ importers:
       '@simplewebauthn/browser':
         specifier: ^14.0.0
         version: 14.0.0
+      '@tanstack/history':
+        specifier: ^1.162.0
+        version: 1.162.0
       '@tanstack/react-query':
         specifier: ^5.101.4
         version: 5.101.4(react@19.2.8)

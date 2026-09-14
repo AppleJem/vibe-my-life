@@ -174,6 +174,8 @@ export const habitModel = {
       // A null group means ungrouped — leave the attribute off entirely rather than
       // storing an empty one.
       ...(input.groupId != null && { groupId: input.groupId }),
+      // Absent means not in training, so a habit created outside the modal stores nothing.
+      ...(input.training !== undefined && { training: input.training }),
     }
 
     await docClient.send(new PutCommand({
@@ -191,7 +193,7 @@ export const habitModel = {
   async updateHabit(userId: string, habitId: string, updates: UpdateHabitInput): Promise<Habit> {
     const UPDATABLE = [
       'name', 'emoji', 'type', 'polarity', 'startDate', 'description', 'unit', 'target', 'tags',
-      'groupId', 'color', 'archived',
+      'groupId', 'color', 'archived', 'training',
     ] as const
 
     const setExpressions: string[] = []

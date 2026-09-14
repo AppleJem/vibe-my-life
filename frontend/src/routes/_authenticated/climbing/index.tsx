@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { ActivityGrid } from '../../../components/Climbing/ActivityGrid'
+import { TrainingSection } from '../../../components/Climbing/TrainingSection'
 import { useSessions } from '../../../hooks/useClimbing'
 import { formatSessionDate, solveCount } from '../../../utils/climbing'
 
@@ -41,6 +42,8 @@ function ClimbingPage() {
       ) : (
         <>
           <ActivityGrid sessions={sessions} onPickSession={openSession} />
+
+          <TrainingSection />
 
           {sessions.length === 0 ? (
             <div className="text-center py-12">

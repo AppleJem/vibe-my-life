@@ -57,6 +57,12 @@ export interface Habit {
   lastCompletedDate?: string
   createdAt: string
   archived?: boolean
+  /**
+   * Part of the climbing training set. Absent means not in training, so the climbing
+   * section filters the same list query everything else reads — and a deleted habit can
+   * never leave a dangling training entry.
+   */
+  training?: boolean
 }
 
 export interface CreateHabitInput {
@@ -72,6 +78,7 @@ export interface CreateHabitInput {
   /** `null` is "no group" — the form always sends the field, set or not. */
   groupId?: string | null
   color?: string
+  training?: boolean
 }
 
 /** `null` clears the attribute. */
@@ -88,6 +95,8 @@ export interface UpdateHabitInput {
   groupId?: string | null
   color?: string
   archived?: boolean
+  /** `null` removes the habit from training, matching the null-clears convention. */
+  training?: boolean | null
 }
 
 /**

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import axios from 'axios'
 import { BigCheckBox } from '../../../components/Habits/BigCheckBox'
@@ -33,6 +33,7 @@ export const Route = createFileRoute('/_authenticated/habits/$habitId')({
 function HabitDetailPage() {
   const { habitId } = Route.useParams()
   const navigate = useNavigate()
+  const router = useRouter()
   const {
     habit,
     completions,
@@ -225,7 +226,11 @@ function HabitDetailPage() {
     <>
       <div className="flex items-center gap-3">
         <button
-          onClick={() => navigate({ to: '/habits' })}
+          onClick={() =>
+            router.history.canGoBack()
+              ? router.history.back()
+              : navigate({ to: '/habits' })
+          }
           className="text-zinc-400 hover:text-zinc-100 transition-colors p-1 -ml-1"
           aria-label="Back"
         >

@@ -25,6 +25,7 @@ const createHabitSchema = z.object({
   tags: z.array(z.string().min(1)).optional().default([]),
   groupId: z.string().min(1).nullable().optional(),
   color: hexColor.optional(),
+  training: z.boolean().optional(),
 })
 
 // null on `unit`/`target` clears them — switching a count habit to boolean has to shed
@@ -44,6 +45,8 @@ const updateHabitSchema = z.object({
   groupId: z.string().min(1).nullable().optional(),
   color: hexColor.optional(),
   archived: z.boolean().optional(),
+  // null takes the habit out of training — same shape as `groupId` and `unit` above.
+  training: z.boolean().nullable().optional(),
 })
 
 const createHabitGroupSchema = z.object({
