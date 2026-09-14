@@ -85,11 +85,21 @@ export function weekdayOf(date: string): number {
   return new Date(year, month - 1, day).getDay()
 }
 
+/** The number of week columns the calendar shows. Also sizes the training fetch window. */
+export const ACTIVITY_COLUMNS = 16
+
+/** What a day holds. Picks the cell's hue; intensity is separate. */
+export type ActivityKind = 'none' | 'climb' | 'training' | 'both'
+
 export interface ActivityCell {
   date: string
   climbCount: number
   sessionIds: string[]
-  /** 0–4, driving the shade. */
+  /** Training habits completed that day, one per completion. */
+  trainingCount: number
+  /** Climbing, training, both, or nothing — drives which palette the shade comes from. */
+  kind: ActivityKind
+  /** 0–4 combined intensity. 0 only when `kind` is `'none'`. */
   level: number
 }
 
@@ -107,16 +117,33 @@ function levelFor(climbCount: number): number {
 }
 
 /**
+ * Training buckets: how many training habits were completed. The ceiling is low because
+ * the set is small — four habits in a day is a full session, not a warm-up.
+ */
+function levelForTraining(count: number): number {
+  if (count <= 0) return 0
+  if (count === 1) return 1
+  if (count === 2) return 2
+  if (count === 3) return 3
+  return 4
+}
+
+/**
  * A GitHub-style contribution grid: 7 rows (Sun–Sat) × N columns (weeks).
  * Days with no session are present and empty rather than skipped, because the gaps
  * are what the picture is about.
  *
  * The grid always starts on a Sunday and the last column ends on a Saturday,
  * so the day-of-week labels stay consistent. The grid includes the current week.
+ *
+ * A day's `kind` is decided by what is present, and `level` by how much: the two sides are
+ * graded on their own scales and summed, so a both-day reads as the effort of the climb and
+ * the training together rather than of the larger of the two.
  */
 export function buildActivityGrid(
   sessions: ClimbingSession[],
-  columns = 16,
+  trainingByDate: ReadonlyMap<string, number> = new Map(),
+  columns = ACTIVITY_COLUMNS,
 ): ActivityCell[] {
   const byDate = new Map<string, { climbCount: number; sessionIds: string[] }>()
 
@@ -143,25 +170,67 @@ export function buildActivityGrid(
     const date = addDays(startDate, i)
     const entry = byDate.get(date)
     const climbCount = entry?.climbCount ?? 0
-    const attended = entry !== undefined
+    const trainingCount = trainingByDate.get(date) ?? 0
+
+    const hasClimb = entry !== undefined
+    const hasTraining = trainingCount > 0
+    const kind: ActivityKind = hasClimb
+      ? hasTraining
+        ? 'both'
+        : 'climb'
+      : hasTraining
+        ? 'training'
+        : 'none'
+
+    // A session with no climbs logged yet still counts as being at the wall.
+    const climbLevel = hasClimb ? Math.max(1, levelFor(climbCount)) : 0
+    const level = Math.min(4, climbLevel + levelForTraining(trainingCount))
 
     return {
       date,
       climbCount,
       sessionIds: entry?.sessionIds ?? [],
-      level: attended ? Math.max(1, levelFor(climbCount)) : 0,
+      trainingCount,
+      kind,
+      level,
     }
   })
 }
 
-/** Tailwind classes per level, sky like the rest of the app. */
-export const ACTIVITY_SHADES = [
-  'bg-zinc-800/70',
-  'bg-sky-500/25',
-  'bg-sky-500/45',
-  'bg-sky-500/70',
+/** The empty cell, shared by every palette at level 0. */
+const EMPTY_SHADE = 'bg-zinc-800/70'
+
+/** One palette per hue, indexed by the 0–4 level. */
+export const CLIMB_SHADES = [
+  EMPTY_SHADE,
+  'bg-sky-500/30',
+  'bg-sky-500/50',
+  'bg-sky-500/75',
   'bg-sky-400',
-]
+] as const
+
+export const TRAINING_SHADES = [
+  EMPTY_SHADE,
+  'bg-emerald-500/30',
+  'bg-emerald-500/50',
+  'bg-emerald-500/75',
+  'bg-emerald-400',
+] as const
+
+export const BOTH_SHADES = [
+  EMPTY_SHADE,
+  'bg-fuchsia-500/30',
+  'bg-fuchsia-500/50',
+  'bg-fuchsia-500/75',
+  'bg-fuchsia-400',
+] as const
+
+/** The Tailwind class for a cell: hue by kind, darkness by combined level. */
+export function activityShade(kind: ActivityKind, level: number): string {
+  const palette =
+    kind === 'training' ? TRAINING_SHADES : kind === 'both' ? BOTH_SHADES : CLIMB_SHADES
+  return palette[level] ?? EMPTY_SHADE
+}
 
 /**
  * Steps an integer grade. The stored value is text in both grade kinds, so this parses,

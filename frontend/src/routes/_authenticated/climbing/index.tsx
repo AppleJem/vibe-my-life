@@ -2,7 +2,8 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { ActivityGrid } from '../../../components/Climbing/ActivityGrid'
 import { TrainingSection } from '../../../components/Climbing/TrainingSection'
 import { useSessions } from '../../../hooks/useClimbing'
-import { formatSessionDate, solveCount } from '../../../utils/climbing'
+import { useTrainingActivity } from '../../../hooks/useHabits'
+import { ACTIVITY_COLUMNS, formatSessionDate, solveCount } from '../../../utils/climbing'
 
 export const Route = createFileRoute('/_authenticated/climbing/')({
   component: ClimbingPage,
@@ -11,6 +12,8 @@ export const Route = createFileRoute('/_authenticated/climbing/')({
 function ClimbingPage() {
   const navigate = useNavigate()
   const { sessions, loading, error } = useSessions()
+  // Same 16-week window the grid draws, so the oldest column is never missed.
+  const { byDate: trainingByDate } = useTrainingActivity(ACTIVITY_COLUMNS * 7)
 
   const openSession = (sessionId: string) =>
     navigate({ to: '/climbing/$sessionId', params: { sessionId } })
@@ -41,7 +44,11 @@ function ClimbingPage() {
         </div>
       ) : (
         <>
-          <ActivityGrid sessions={sessions} onPickSession={openSession} />
+          <ActivityGrid
+            sessions={sessions}
+            trainingByDate={trainingByDate}
+            onPickSession={openSession}
+          />
 
           <TrainingSection />
 

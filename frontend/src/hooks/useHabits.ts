@@ -158,6 +158,37 @@ export function useTrainingHabits() {
 }
 
 /**
+ * Training completions per local date over the last `days`, for the climbing calendar.
+ *
+ * Reads the same recent-completions query the habit list's week strip uses and narrows it
+ * to the habits currently in training, so no new endpoint is needed. The window has to
+ * cover the calendar's oldest column, which is why the caller passes the grid's day count.
+ *
+ * Membership is read live: a habit removed from training stops counting on past days too.
+ * The calendar is a picture of the current training set, not an audit of it.
+ */
+export function useTrainingActivity(days: number) {
+  const { training } = useTrainingHabits()
+  const { byHabit, error } = useRecentCompletions(days)
+
+  const byDate = useMemo(() => {
+    const trainingIds = new Set(training.map((habit) => habit.id))
+    const counts = new Map<string, number>()
+
+    for (const [habitId, completions] of byHabit) {
+      if (!trainingIds.has(habitId)) continue
+      for (const completion of completions) {
+        counts.set(completion.date, (counts.get(completion.date) ?? 0) + 1)
+      }
+    }
+
+    return counts
+  }, [training, byHabit])
+
+  return { byDate, error }
+}
+
+/**
  * Group writes. Reads come off the same list query as everything else, so creating,
  * renaming, reordering, or deleting a group all invalidate exactly one key.
  */
